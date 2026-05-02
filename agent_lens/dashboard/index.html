@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+  <meta http-equiv="X-Frame-Options" content="SAMEORIGIN" />
+  <title>agent-lens — interactive agent debugger</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- TOP BAR -->
+  <header class="topbar">
+    <a class="logo" href="/">agent<span>-lens</span></a>
+
+    <select id="run-select" class="run-select" aria-label="Select run">
+      <option value="">— no runs yet —</option>
+    </select>
+
+    <div class="controls">
+      <button id="btn-pause"  class="btn btn-pause"  disabled title="Pause (Space)">
+        ⏸ Pause <kbd class="kbd">Space</kbd>
+      </button>
+      <button id="btn-resume" class="btn btn-resume" disabled title="Resume (Space)">
+        ▶ Resume <kbd class="kbd">Space</kbd>
+      </button>
+      <button id="btn-step"   class="btn btn-step"   disabled title="Step one LLM call">
+        ⏭ Step
+      </button>
+      <button id="btn-fork"   class="btn btn-fork"   disabled title="Fork run (F)">
+        ⑂ Fork <kbd class="kbd">F</kbd>
+      </button>
+    </div>
+
+    <div class="spacer"></div>
+
+    <span class="muted" style="font-size:11px;font-family:monospace;">
+      <kbd class="kbd">/</kbd> search &nbsp;
+      <kbd class="kbd">J/K</kbd> nav &nbsp;
+      <kbd class="kbd">1/2/3</kbd> tabs
+    </span>
+  </header>
+
+  <!-- BODY -->
+  <div class="body">
+
+    <!-- LEFT SIDEBAR — run list -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        Runs
+        <input type="text" id="search-input" class="search-bar" placeholder="Filter…" style="margin-top:6px;display:block;" aria-label="Search runs" />
+      </div>
+      <div id="run-list" class="run-list">
+        <div class="empty-state" style="padding:24px 12px;">
+          <div class="big-icon" style="font-size:28px;">🏃</div>
+          <p>No runs yet.<br/>Start your agent to see traces here.</p>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN AREA -->
+    <main class="main">
+
+      <!-- TABS -->
+      <nav class="tabs" role="tablist">
+        <div class="tab active" data-view="tree" role="tab" tabindex="0" aria-label="Tree view">
+          Tree
+        </div>
+        <div class="tab" data-view="timeline" role="tab" tabindex="0" aria-label="Timeline view">
+          Timeline
+        </div>
+        <div class="tab" data-view="inspector" role="tab" tabindex="0" aria-label="Inspector view">
+          Inspector
+        </div>
+      </nav>
+
+      <!-- TAB CONTENT -->
+      <div id="tab-content" class="tab-content">
+        <div class="empty-state">
+          <div class="big-icon">🔭</div>
+          <h3>Welcome to agent-lens</h3>
+          <p>
+            Instrument your agent with <code>@agent_lens.trace</code>,<br/>
+            then select a run from the left panel.
+          </p>
+          <p style="margin-top:12px;">
+            Quick start: <code>agent_lens.install()</code> to auto-patch OpenAI + Anthropic.
+          </p>
+        </div>
+      </div>
+
+    </main>
+
+  </div><!-- /body -->
+
+  <!-- STATUS BAR -->
+  <footer class="statusbar">
+    <div class="conn-indicator">
+      <div id="conn-dot" class="conn-dot connecting"></div>
+      <span id="conn-text">connecting…</span>
+    </div>
+    <span id="event-count">0 events</span>
+    <span class="spacer"></span>
+    <span>agent-lens v0.1.0</span>
+  </footer>
+
+</div><!-- /layout -->
+
+<!-- FORK MODAL -->
+<div id="fork-modal" class="modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="Fork run">
+  <div class="modal">
+    <div class="modal-header">
+      <span>⑂ Fork run from span</span>
+      <button class="modal-close" onclick="window.__al.hideForkModal()" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:12px;color:#64748b;margin-bottom:12px;">
+        Edit the messages below to change what the LLM receives in the forked run.
+        The forked run shares all spans up to this point; new spans diverge from here.
+      </p>
+      <input type="hidden" id="fork-span-id" />
+      <label style="font-size:11px;color:#64748b;display:block;margin-bottom:4px;">
+        Messages (JSON array)
+      </label>
+      <textarea id="fork-messages" class="edit-messages" spellcheck="false" placeholder='[{"role": "user", "content": "..."}]'></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="window.__al.hideForkModal()">Cancel</button>
+      <button class="btn btn-fork" onclick="window.__al.submitFork()">⑂ Fork</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
