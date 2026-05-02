@@ -5,6 +5,7 @@ Overhead benchmark test.
 (5ms per call budget)
 """
 
+import os
 import sys
 import time
 import uuid
@@ -15,7 +16,10 @@ from agent_lens.models import EventType
 from agent_lens.tracer import Tracer, trace
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="Performance benchmarks not reliable on Windows CI")
+@pytest.mark.skipif(
+    sys.platform == "win32" or bool(os.environ.get("CI")),
+    reason="Performance benchmarks are only meaningful on local hardware",
+)
 class TestOverheadBenchmark:
     def test_100_traced_calls_under_500ms(self, reset_singletons):
         """
