@@ -7,10 +7,10 @@ All models use Pydantic v2 for validation and serialization.
 
 from __future__ import annotations
 
-from enum import Enum
-from typing import Any
 import time
 import uuid
+from enum import Enum
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -63,7 +63,7 @@ class Span(BaseModel):
     start_time: float = Field(default_factory=time.time)
     end_time: float | None = None
     events: list[Event] = Field(default_factory=list)
-    children: list["Span"] = Field(default_factory=list)
+    children: list[Span] = Field(default_factory=list)
     status: str = "ok"  # "ok", "error", "paused"
 
     @property

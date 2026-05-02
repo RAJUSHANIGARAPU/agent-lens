@@ -7,6 +7,7 @@ and optionally opens a browser tab.
 
 from __future__ import annotations
 
+import contextlib
 import threading
 import time
 import webbrowser
@@ -84,10 +85,8 @@ def start(
     print(f"agent-lens dashboard running at {url}")
 
     if open_browser:
-        try:
+        with contextlib.suppress(Exception):  # Non-fatal if browser can't be opened
             webbrowser.open(url)
-        except Exception:
-            pass  # Non-fatal if browser can't be opened
 
     return url
 

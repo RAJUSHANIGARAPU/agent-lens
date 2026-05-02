@@ -16,7 +16,6 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Optional
 
 import typer
 
@@ -46,7 +45,7 @@ def dashboard(
             time.sleep(1)
     except KeyboardInterrupt:
         typer.echo("\nShutting down.")
-        raise typer.Exit(0)
+        raise typer.Exit(0) from None
 
 
 @app.command()
@@ -88,17 +87,18 @@ def replay(
         data = json.loads(resolved.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as exc:
         typer.echo(f"Error reading file: {exc}", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Import run data into a temporary in-memory store
     import tempfile
+
     from agent_lens.store import Store
 
-    tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-    tmp.close()
-    store = Store(path=tmp.name)
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as _f:
+        tmp_name = _f.name
+    store = Store(path=tmp_name)
 
-    from agent_lens.models import Event, EventType, Run, RunStatus, Span
+    from agent_lens.models import Event, Run, Span
 
     try:
         if "run" in data:
@@ -115,7 +115,7 @@ def replay(
             store.save_event(event)
     except Exception as exc:
         typer.echo(f"Error importing run data: {exc}", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     typer.echo("Run loaded. Starting dashboard...")
 
@@ -129,14 +129,14 @@ def replay(
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        os.unlink(tmp.name)
-        raise typer.Exit(0)
+        os.unlink(tmp_name)
+        raise typer.Exit(0) from None
 
 
 @app.command()
 def export(
     run_id: str = typer.Argument(..., help="Run ID to export"),
-    output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file path"),
+    output: str | None = typer.Option(None, "--output", "-o", help="Output file path"),
 ) -> None:
     """Export a run as a self-contained HTML file."""
     from agent_lens.store import get_default_store

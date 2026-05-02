@@ -20,9 +20,9 @@ Quick start::
 
 from __future__ import annotations
 
-from agent_lens.tracer import trace, trace_span, Tracer
-from agent_lens.models import Event, EventType, Run, RunStatus, Span
 from agent_lens import dashboard_launcher as dashboard
+from agent_lens.models import Event, EventType, Run, RunStatus, Span
+from agent_lens.tracer import Tracer, trace, trace_span  # noqa: F401
 
 __version__ = "0.1.0"
 __author__ = "Raju S"

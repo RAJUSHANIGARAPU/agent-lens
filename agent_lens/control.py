@@ -15,7 +15,7 @@ import time
 import uuid
 from typing import Any
 
-from agent_lens.models import Run, RunStatus, Span
+from agent_lens.models import Run, RunStatus
 
 
 class ControlPlane:
@@ -30,7 +30,7 @@ class ControlPlane:
     - _inject_results: one-shot synthetic tool results to inject into a run.
     """
 
-    _instance: "ControlPlane | None" = None
+    _instance: ControlPlane | None = None
     _instance_lock = threading.Lock()
 
     def __init__(self) -> None:
@@ -48,7 +48,7 @@ class ControlPlane:
         self._store = None
 
     @classmethod
-    def get_instance(cls) -> "ControlPlane":
+    def get_instance(cls) -> ControlPlane:
         """Return the module-level ControlPlane singleton."""
         if cls._instance is None:
             with cls._instance_lock:

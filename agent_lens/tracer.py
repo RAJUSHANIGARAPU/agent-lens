@@ -19,9 +19,10 @@ import re
 import threading
 import time
 import uuid
-from contextlib import contextmanager
+from collections.abc import Callable, Generator
+from contextlib import contextmanager, suppress
 from contextvars import ContextVar
-from typing import Any, Callable, Generator
+from typing import Any
 
 from agent_lens.models import Event, EventType, Run, RunStatus, Span
 from agent_lens.store import get_default_store
@@ -80,7 +81,7 @@ class EventBus:
     Thread-safe. The tracer puts events here; the FastAPI SSE handler reads them.
     """
 
-    _instance: "EventBus | None" = None
+    _instance: EventBus | None = None
     _instance_lock = threading.Lock()
 
     def __init__(self) -> None:
@@ -89,7 +90,7 @@ class EventBus:
         self._loop: asyncio.AbstractEventLoop | None = None
 
     @classmethod
-    def get_instance(cls) -> "EventBus":
+    def get_instance(cls) -> EventBus:
         if cls._instance is None:
             with cls._instance_lock:
                 if cls._instance is None:
@@ -113,11 +114,8 @@ class EventBus:
         return q
 
     def unsubscribe(self, q: asyncio.Queue) -> None:
-        with self._sub_lock:
-            try:
-                self._subscribers.remove(q)
-            except ValueError:
-                pass
+        with self._sub_lock, suppress(ValueError):
+            self._subscribers.remove(q)
 
     def publish(self, event_dict: dict[str, Any]) -> None:
         """Publish an event to all subscribers (thread-safe)."""
@@ -132,10 +130,8 @@ class EventBus:
             return
 
         for q in subs:
-            try:
+            with suppress(Exception):  # Drop if queue is full; never crash the tracer
                 loop.call_soon_threadsafe(q.put_nowait, event_dict)
-            except Exception:
-                pass  # Drop if queue is full; never crash the tracer
 
 
 # ------------------------------------------------------------------
@@ -144,7 +140,7 @@ class EventBus:
 
 _current_run_id: ContextVar[str | None] = ContextVar("current_run_id", default=None)
 _current_span_id: ContextVar[str | None] = ContextVar("current_span_id", default=None)
-_span_stack: ContextVar[list[str]] = ContextVar("span_stack", default=[])
+_span_stack: ContextVar[list[str] | None] = ContextVar("span_stack", default=None)
 
 
 class TraceContext:
@@ -163,14 +159,14 @@ class TraceContext:
 
     @staticmethod
     def push_span(span_id: str) -> None:
-        stack = list(_span_stack.get())
+        stack = list(_span_stack.get() or [])
         stack.append(span_id)
         _span_stack.set(stack)
         _current_span_id.set(span_id)
 
     @staticmethod
     def pop_span() -> str | None:
-        stack = list(_span_stack.get())
+        stack = list(_span_stack.get() or [])
         if not stack:
             return None
         popped = stack.pop()
@@ -186,6 +182,7 @@ class TraceContext:
     def clear() -> None:
         _current_run_id.set(None)
         _current_span_id.set(None)
+        _span_stack.set(None)
         _span_stack.set([])
 
 
@@ -198,7 +195,7 @@ class Tracer:
     Central tracer singleton. Manages all active runs and spans.
     """
 
-    _instance: "Tracer | None" = None
+    _instance: Tracer | None = None
     _instance_lock = threading.Lock()
 
     def __init__(self) -> None:
@@ -210,7 +207,7 @@ class Tracer:
         self._bus = EventBus.get_instance()
 
     @classmethod
-    def get_instance(cls) -> "Tracer":
+    def get_instance(cls) -> Tracer:
         if cls._instance is None:
             with cls._instance_lock:
                 if cls._instance is None:

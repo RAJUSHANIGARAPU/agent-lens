@@ -9,8 +9,8 @@ Graceful: if openai is not installed, the patch is a no-op.
 
 from __future__ import annotations
 
-import time
 import threading
+import time
 from typing import Any
 
 _patched = False
@@ -89,13 +89,13 @@ def patch() -> bool:
             return True
 
         try:
-            import openai
-            from openai.resources.chat.completions import Completions
+            import openai  # noqa: F401
+            from openai.resources.chat.completions import Completions  # noqa: F401
         except ImportError:
             return False
 
         from agent_lens.models import EventType
-        from agent_lens.tracer import Tracer, TraceContext, redact
+        from agent_lens.tracer import TraceContext, Tracer
 
         _original_create = Completions.create
         _original_acreate = Completions.acreate
@@ -229,8 +229,8 @@ def unpatch() -> None:
         if not _patched:
             return
         try:
-            import openai
-            from openai.resources.chat.completions import Completions
+            import openai  # noqa: F401
+            from openai.resources.chat.completions import Completions  # noqa: F401
         except ImportError:
             return
 

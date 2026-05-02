@@ -9,8 +9,8 @@ Graceful: if anthropic is not installed, the patch is a no-op.
 
 from __future__ import annotations
 
-import time
 import threading
+import time
 from typing import Any
 
 _patched = False
@@ -86,13 +86,13 @@ def patch() -> bool:
             return True
 
         try:
-            import anthropic
+            import anthropic  # noqa: F401
             from anthropic.resources.messages import Messages
         except ImportError:
             return False
 
         from agent_lens.models import EventType
-        from agent_lens.tracer import Tracer, TraceContext
+        from agent_lens.tracer import TraceContext, Tracer
 
         _original_create = Messages.create
 
@@ -107,7 +107,7 @@ def patch() -> bool:
 
             model = kwargs.get("model", args[0] if args else "unknown")
             messages = kwargs.get("messages", [])
-            system = kwargs.get("system", None)
+            system = kwargs.get("system")
 
             span = tracer.start_span(f"anthropic.messages({model})", "llm")
             start_time = time.time()

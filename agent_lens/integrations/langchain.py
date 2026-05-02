@@ -14,7 +14,7 @@ Graceful: if langchain is not installed, AgentLensCallbackHandler is a stub clas
 from __future__ import annotations
 
 import time
-from typing import Any, Union
+from typing import Any
 from uuid import UUID
 
 # Attempt to import LangChain base class; fall back to a plain object if not installed

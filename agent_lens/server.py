@@ -17,19 +17,17 @@ from __future__ import annotations
 import asyncio
 import html
 import json
-import os
 import secrets
-import time
+from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import Any, AsyncGenerator
+from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from agent_lens.models import RunStatus
 from agent_lens.store import get_default_store
 from agent_lens.tracer import EventBus
 
