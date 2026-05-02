@@ -9,6 +9,7 @@ Covers:
 - SQLite persistence: events survive store reload
 """
 
+import sys
 import threading
 import time
 import uuid
@@ -288,6 +289,7 @@ class TestSecretRedaction:
 # Overhead benchmark
 # ----------------------------------------------------------------
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Performance benchmarks not reliable on Windows CI")
 class TestOverhead:
     def test_1000_no_op_calls_under_5_seconds(self, reset_singletons):
         """1000 traced no-op calls must complete in under 5 seconds."""

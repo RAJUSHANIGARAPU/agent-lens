@@ -165,8 +165,8 @@ def export(
     dashboard_dir = PathLib(__file__).parent / "dashboard"
     css_path = dashboard_dir / "style.css"
     js_path = dashboard_dir / "app.js"
-    css = css_path.read_text() if css_path.exists() else ""
-    js = js_path.read_text() if js_path.exists() else ""
+    css = css_path.read_text(encoding="utf-8") if css_path.exists() else ""
+    js = js_path.read_text(encoding="utf-8") if js_path.exists() else ""
 
     export_html = f"""<!DOCTYPE html>
 <html lang="en">

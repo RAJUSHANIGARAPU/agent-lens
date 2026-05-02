@@ -117,7 +117,7 @@ def create_app(store=None, csrf_token: str | None = None) -> FastAPI:
     async def serve_dashboard():
         index = DASHBOARD_DIR / "index.html"
         if index.exists():
-            return HTMLResponse(index.read_text())
+            return HTMLResponse(index.read_text(encoding="utf-8"))
         return HTMLResponse("<h1>agent-lens dashboard</h1><p>Dashboard files not found.</p>")
 
     # ------------------------------------------------------------------
@@ -178,8 +178,8 @@ def create_app(store=None, csrf_token: str | None = None) -> FastAPI:
 
         css_path = DASHBOARD_DIR / "style.css"
         js_path = DASHBOARD_DIR / "app.js"
-        css = css_path.read_text() if css_path.exists() else ""
-        js = js_path.read_text() if js_path.exists() else ""
+        css = css_path.read_text(encoding="utf-8") if css_path.exists() else ""
+        js = js_path.read_text(encoding="utf-8") if js_path.exists() else ""
 
         export_html = f"""<!DOCTYPE html>
 <html lang="en">
