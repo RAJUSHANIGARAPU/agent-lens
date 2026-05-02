@@ -8,15 +8,12 @@ Covers:
 - SSE endpoint connects and streams events
 """
 
-import asyncio
 import json
 import time
 import uuid
-from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
-from httpx import AsyncClient, ASGITransport
 
 from agent_lens.models import Run, RunStatus, Span
 from agent_lens.server import DEFAULT_HOST, create_app
@@ -316,8 +313,8 @@ class TestExport:
 
 def test_sse_connects_and_receives_ping(tmp_path):
     """SSE endpoint connects and sends an initial ping event."""
-    from agent_lens.store import Store
     from agent_lens.server import create_app
+    from agent_lens.store import Store
 
     db_path = tmp_path / "sse_test.db"
     store = Store(path=db_path)
@@ -330,7 +327,7 @@ def test_sse_connects_and_receives_ping(tmp_path):
         assert response.status_code == 200
         assert "text/event-stream" in response.headers.get("content-type", "")
         lines = response.text.splitlines()
-        data_lines = [l for l in lines if l.startswith("data:")]
+        data_lines = [line for line in lines if line.startswith("data:")]
         assert data_lines, "No data lines in SSE response"
         first_event = json.loads(data_lines[0][5:].strip())
         assert first_event.get("type") == "ping"

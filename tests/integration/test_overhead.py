@@ -6,11 +6,7 @@ Overhead benchmark test.
 """
 
 import time
-import threading
 import uuid
-from unittest.mock import MagicMock, patch
-
-import pytest
 
 from agent_lens.models import EventType
 from agent_lens.tracer import Tracer, trace
@@ -52,9 +48,9 @@ class TestOverheadBenchmark:
         from agent_lens.store import get_default_store
 
         tracer = Tracer.get_instance()
-        store = get_default_store()
+        get_default_store()
 
-        run = tracer.start_run("overhead-run")
+        tracer.start_run("overhead-run")
         span = tracer.start_span("overhead-span", "agent")
 
         N = 1000
@@ -77,8 +73,8 @@ class TestOverheadBenchmark:
         """
         Bulk SQLite writes stay within reasonable time bounds.
         """
+        from agent_lens.models import Event, Run, Span
         from agent_lens.store import Store
-        from agent_lens.models import Run, Span, Event
 
         db = tmp_path / "overhead.db"
         store = Store(path=db)
@@ -121,7 +117,7 @@ class TestOverheadBenchmark:
         """
         Redaction doesn't add significant overhead to traced calls.
         """
-        from agent_lens.tracer import Tracer, redact
+        from agent_lens.tracer import redact
 
         N = 1000
         secret_data = {
@@ -137,7 +133,7 @@ class TestOverheadBenchmark:
 
         start = time.perf_counter()
         for _ in range(N):
-            result = redact(secret_data)
+            redact(secret_data)
         elapsed_ms = (time.perf_counter() - start) * 1000
 
         per_call_ms = elapsed_ms / N

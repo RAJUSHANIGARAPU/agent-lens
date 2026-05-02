@@ -15,14 +15,12 @@ import time
 import uuid
 from pathlib import Path
 
-import pytest
 from fastapi.testclient import TestClient
 
-from agent_lens.models import Run, RunStatus, Span, Event, EventType
+from agent_lens.models import Event, EventType, Run, RunStatus, Span
 from agent_lens.server import DEFAULT_HOST, create_app
 from agent_lens.store import Store
 from agent_lens.tracer import redact
-
 
 # ----------------------------------------------------------------
 # API Key / Secret redaction
@@ -63,7 +61,7 @@ class TestSecretRedaction:
 
         # Read raw DB bytes to verify key is not present anywhere
         raw = db.read_bytes().decode("utf-8", errors="replace")
-        assert secret not in raw, f"Secret key found in raw SQLite data!"
+        assert secret not in raw, "Secret key found in raw SQLite data!"
 
         store.close()
 
@@ -180,8 +178,8 @@ class TestXSSPrevention:
 class TestPathTraversal:
     def test_replay_rejects_etc_passwd(self, tmp_path):
         """The replay CLI command rejects /etc/passwd as input path."""
-        import sys
         from typer.testing import CliRunner
+
         from agent_lens.cli import app
 
         runner = CliRunner()
@@ -196,6 +194,7 @@ class TestPathTraversal:
     def test_replay_rejects_relative_traversal(self, tmp_path):
         """Path traversal via ../ is caught."""
         from typer.testing import CliRunner
+
         from agent_lens.cli import app
 
         runner = CliRunner()
@@ -211,6 +210,7 @@ class TestPathTraversal:
         bad_file.write_text("not a valid file")
 
         from typer.testing import CliRunner
+
         from agent_lens.cli import app
 
         runner = CliRunner()
@@ -248,8 +248,6 @@ class TestPathTraversal:
 class TestNoUnsafeDeserialization:
     def test_no_pickle_in_codebase(self):
         """Verify that pickle is not used for deserializing trace data."""
-        import ast
-        import os
 
         agent_lens_dir = Path(__file__).parent.parent.parent / "agent_lens"
         pickle_usages = []

@@ -12,20 +12,18 @@ Covers:
 import threading
 import time
 import uuid
-from pathlib import Path
 
 import pytest
 
 from agent_lens.models import EventType, RunStatus
 from agent_lens.store import Store
 from agent_lens.tracer import (
-    Tracer,
     TraceContext,
+    Tracer,
     redact,
     trace,
     trace_span,
 )
-
 
 # ----------------------------------------------------------------
 # Basic decorator tests
@@ -87,6 +85,7 @@ class TestTraceDecorator:
     def test_async_function_is_wrapped(self, reset_singletons):
         """@trace wraps an async function correctly."""
         import asyncio
+
         from agent_lens.store import get_default_store
 
         @trace
@@ -143,7 +142,6 @@ class TestTraceDecorator:
     def test_trace_context_manager(self, reset_singletons):
         """trace_span() context manager creates a span."""
         from agent_lens.store import get_default_store
-        from agent_lens.tracer import Tracer
 
         tracer = Tracer.get_instance()
         run = tracer.start_run("ctx-test")
@@ -267,7 +265,6 @@ class TestSecretRedaction:
     def test_events_stored_without_api_keys(self, reset_singletons):
         """Traced function with Authorization headers stores no keys in DB."""
         from agent_lens.store import get_default_store
-        from agent_lens.tracer import Tracer
 
         tracer = Tracer.get_instance()
         run = tracer.start_run("redaction-test")
@@ -339,7 +336,7 @@ class TestPersistence:
 
         # Write events
         store1 = Store(path=db_path)
-        from agent_lens.models import Run, RunStatus, Span, Event
+        from agent_lens.models import Event, Run, Span
 
         run = Run(id=str(uuid.uuid4()), name="persist-run", start_time=time.time())
         store1.save_run(run)

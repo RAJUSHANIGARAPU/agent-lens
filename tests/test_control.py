@@ -127,7 +127,7 @@ class TestStep:
         cp.step(run.id, num_calls=1)
 
         # First call should pass through (not block)
-        result = threading.Event()
+        threading.Event()
 
         def make_call(call_num, expected_blocked):
             started = threading.Event()

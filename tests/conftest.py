@@ -3,15 +3,12 @@ Shared pytest fixtures for agent-lens tests.
 Each test gets a fresh in-memory SQLite store and reset singletons.
 """
 
-import os
-import tempfile
-from pathlib import Path
 
 import pytest
 
 from agent_lens.control import ControlPlane
 from agent_lens.store import Store, reset_default_store
-from agent_lens.tracer import EventBus, Tracer, TraceContext
+from agent_lens.tracer import EventBus, TraceContext, Tracer
 
 
 @pytest.fixture(autouse=True)

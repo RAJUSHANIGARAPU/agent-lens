@@ -11,10 +11,8 @@ import time
 import uuid
 from collections import defaultdict
 
-import pytest
-
-from agent_lens.models import EventType, Run, RunStatus, Span
-from agent_lens.tracer import Tracer, trace, TraceContext
+from agent_lens.models import EventType, Run, RunStatus
+from agent_lens.tracer import Tracer
 
 
 class TestConcurrency:
@@ -26,7 +24,6 @@ class TestConcurrency:
         from agent_lens.store import get_default_store
 
         N_AGENTS = 50
-        N_EVENTS_PER_AGENT = 2  # AGENT_START + AGENT_END per span
         errors = []
         run_ids = []
         lock = threading.Lock()
@@ -58,7 +55,7 @@ class TestConcurrency:
             t.join(timeout=30.0)
         elapsed = time.perf_counter() - start
 
-        assert not errors, f"Agents raised errors:\n" + "\n".join(str(e) for e in errors[:5])
+        assert not errors, "Agents raised errors:\n" + "\n".join(str(e) for e in errors[:5])
         assert len(run_ids) == N_AGENTS, f"Expected {N_AGENTS} run IDs, got {len(run_ids)}"
 
         store = get_default_store()
@@ -76,7 +73,7 @@ class TestConcurrency:
 
         N = 20
         run_id_map = {}  # agent_id -> run_id
-        event_map = defaultdict(set)  # run_id -> set of agent_ids in events
+        defaultdict(set)  # run_id -> set of agent_ids in events
         lock = threading.Lock()
         barrier = threading.Barrier(N)
 
@@ -123,7 +120,6 @@ class TestConcurrency:
         """
         from agent_lens.control import ControlPlane
         from agent_lens.store import get_default_store
-        from agent_lens.models import Run
 
         store = get_default_store()
         cp = ControlPlane.get_instance()

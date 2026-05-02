@@ -19,7 +19,7 @@ import pytest
 from agent_lens.control import ControlPlane
 from agent_lens.models import Run, RunStatus, Span
 from agent_lens.store import Store
-from agent_lens.tracer import Tracer, TraceContext, trace
+from agent_lens.tracer import Tracer
 
 
 @pytest.fixture
@@ -73,7 +73,7 @@ class TestPauseForkIntegration:
 
         def fork_agent(forked_run_id, edited_msgs):
             # Simulate the forked run executing with new messages
-            run = fresh_store.get_run(forked_run_id)
+            fresh_store.get_run(forked_run_id)
             forked_results.append({
                 "run_id": forked_run_id,
                 "messages": edited_msgs,
@@ -140,7 +140,7 @@ class TestPauseForkIntegration:
         # --- Verify divergence ---
         # Original run is still RUNNING (we just resumed it; in a real agent it'd continue)
         # Forked run is COMPLETED with edited messages
-        assert not forked_results == [], "Forked run should have results"
+        assert forked_results != [], "Forked run should have results"
         assert forked_results[0]["messages"] == edited_messages
         assert forked_results[0]["status"] == "completed"
 
@@ -246,7 +246,7 @@ class TestPauseForkIntegration:
             captured["result"] = result
             final_done.set()
 
-        t = threading.Thread(target=pausable_agent)
+        threading.Thread(target=pausable_agent)
 
         # Set up pause BEFORE starting thread
         # We need to know run_id first — so we pause by using a helper

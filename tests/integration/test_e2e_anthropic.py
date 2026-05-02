@@ -10,14 +10,12 @@ Verifies:
 """
 
 import json
-import time
-import uuid
 
 import pytest
 
 try:
-    import respx
     import httpx
+    import respx
     RESPX_AVAILABLE = True
 except ImportError:
     RESPX_AVAILABLE = False
@@ -77,7 +75,7 @@ def test_anthropic_trace_tree_shape(reset_singletons):
         )
         return response.content[0].text
 
-    result = my_agent()
+    my_agent()
 
     store = get_default_store()
     runs = store.get_runs()
@@ -183,7 +181,7 @@ def test_anthropic_no_api_keys_in_store(reset_singletons):
     spans = store.get_spans(runs[0].id)
 
     all_data = json.dumps([e.data for e in events]) + json.dumps([s.model_dump() for s in spans])
-    assert secret not in all_data, f"Anthropic API key found in stored data!"
+    assert secret not in all_data, "Anthropic API key found in stored data!"
 
 
 @respx.mock

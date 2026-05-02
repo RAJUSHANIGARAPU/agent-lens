@@ -11,13 +11,12 @@ Verifies:
 
 import json
 import time
-import uuid
 
 import pytest
 
 try:
-    import respx
     import httpx
+    import respx
     RESPX_AVAILABLE = True
 except ImportError:
     RESPX_AVAILABLE = False
@@ -81,7 +80,7 @@ def test_openai_trace_tree_shape(reset_singletons):
         )
         return response.choices[0].message.content
 
-    result = research_agent("Python 3.12 features")
+    research_agent("Python 3.12 features")
 
     store = get_default_store()
     runs = store.get_runs()
@@ -187,15 +186,15 @@ def test_no_api_keys_in_stored_data(reset_singletons):
     spans = store.get_spans(runs[0].id)
 
     all_data = json.dumps([e.data for e in events]) + json.dumps([s.model_dump() for s in spans])
-    assert secret_key not in all_data, f"Secret key found in stored data!"
+    assert secret_key not in all_data, "Secret key found in stored data!"
 
 
 @respx.mock
 def test_openai_error_span_marked_as_error(reset_singletons):
     """If OpenAI returns an error, the span is marked as error."""
+    from agent_lens.models import RunStatus
     from agent_lens.store import get_default_store
     from agent_lens.tracer import trace
-    from agent_lens.models import RunStatus
 
     respx.post("https://api.openai.com/v1/chat/completions").mock(
         return_value=httpx.Response(
@@ -213,7 +212,7 @@ def test_openai_error_span_marked_as_error(reset_singletons):
             messages=[{"role": "user", "content": "Hello"}],
         )
 
-    with pytest.raises(Exception):
+    with pytest.raises(RuntimeError):
         agent()
 
     store = get_default_store()
