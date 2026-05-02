@@ -32,6 +32,7 @@ jobs:
         run: ruff check agent_lens/ tests/ --output-format=github
 
       - name: Run tests with coverage
+        shell: bash
         run: |
           pytest tests/ \
             --cov=agent_lens \
@@ -96,6 +97,7 @@ jobs:
         run: python -m build
 
       - name: Verify package contents
+        shell: bash
         run: |
           pip install dist/*.whl
           python -c "import agent_lens; print(agent_lens.__version__)"
