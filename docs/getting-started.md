@@ -7,7 +7,7 @@ agent-lens is the interactive debugger for LLM agents. Like `pdb` lets you pause
 ## Installation
 
 ```bash
-pip install agent-lens
+pip install agentlens
 ```
 
 Requirements: Python 3.10+, no Docker, no cloud account, no API keys for the tool itself.

@@ -96,7 +96,7 @@ agent_lens.install()
 agent-lens
 The interactive debugger for AI agents.
 
-pip install agent-lens
+pip install agentlens
 ```
 
 ---

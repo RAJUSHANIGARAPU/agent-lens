@@ -9,7 +9,7 @@
 
 **The interactive debugger for AI agents.**
 
-[![PyPI](https://img.shields.io/pypi/v/agent-lens?color=6366f1)](https://pypi.org/project/agent-lens)
+[![PyPI](https://img.shields.io/pypi/v/agentlens?color=6366f1)](https://pypi.org/project/agentlens)
 [![CI](https://github.com/RAJUSHANIGARAPU/agent-lens/actions/workflows/ci.yml/badge.svg)](https://github.com/RAJUSHANIGARAPU/agent-lens/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
@@ -34,7 +34,7 @@ agent-lens does.
 ## Install and Use (5 lines)
 
 ```bash
-pip install agent-lens
+pip install agentlens
 ```
 
 ```python
