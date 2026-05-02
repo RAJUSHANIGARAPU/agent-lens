@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "agentlens"
+name = "agentlens-tracer"
 version = "0.1.0"
 description = "The interactive debugger for LLM agents. Pause, inspect, and fork any agent mid-run."
 readme = "README.md"

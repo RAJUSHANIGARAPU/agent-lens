@@ -5,7 +5,7 @@ This guide takes you from zero to a working agent-lens trace in under 5 minutes.
 ## Step 1: Install
 
 ```bash
-pip install agentlens
+pip install agentlens-tracer
 ```
 
 Verify installation:
