@@ -44,7 +44,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          file: ./coverage.xml
+          files: ./coverage.xml
           flags: unittests
           name: codecov-umbrella
           fail_ci_if_error: false
@@ -68,8 +68,13 @@ jobs:
         run: pip install -e ".[dev]"
 
       - name: Run pip-audit (project deps only)
-        # Audit only project dependencies, skip pip itself
-        run: pip-audit --skip-editable --desc
+        # Audit project dependencies only; pip itself is excluded via --ignore-vuln
+        # CVE-2025-8869, CVE-2026-1703, CVE-2026-3219 are in pip, not our deps
+        run: |
+          pip-audit --skip-editable --desc \
+            --ignore-vuln CVE-2025-8869 \
+            --ignore-vuln CVE-2026-1703 \
+            --ignore-vuln CVE-2026-3219
         continue-on-error: true
 
   build:
