@@ -196,7 +196,7 @@ def version() -> None:
     """Print the agent-lens version."""
     try:
         from importlib.metadata import version as pkg_version
-        v = pkg_version("agent-lens")
+        v = pkg_version("agentlens-tracer")
     except Exception:
         v = "0.1.0"
     typer.echo(f"agent-lens {v}")
