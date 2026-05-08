@@ -19,6 +19,10 @@ try:
     RESPX_AVAILABLE = True
 except ImportError:
     RESPX_AVAILABLE = False
+    class _RespxStub:  # noqa: N801
+        def mock(self, f=None):
+            return f if f else (lambda fn: fn)
+    respx = _RespxStub()  # type: ignore[assignment]
 
 try:
     import anthropic
@@ -212,3 +216,43 @@ def test_anthropic_cost_estimate(reset_singletons):
     llm_end = [e for e in events if e.type == "llm_end"]
     # Cost should be a non-negative float
     assert llm_end[0].data.get("cost_usd", -1) >= 0
+
+
+@respx.mock
+def test_thinking_blocks_captured(reset_singletons):
+    """Extended thinking blocks are stored in llm_end event when present."""
+    from agent_lens.store import get_default_store
+    from agent_lens.tracer import trace
+
+    thinking_response = {
+        **MOCK_ANTHROPIC_RESPONSE,
+        "content": [
+            {"type": "thinking", "thinking": "Let me reason step by step..."},
+            {"type": "text", "text": "The answer is 42."},
+        ],
+    }
+
+    respx.post("https://api.anthropic.com/v1/messages").mock(
+        return_value=httpx.Response(200, json=thinking_response)
+    )
+
+    client = anthropic.Anthropic(api_key="sk-ant-test-thinking")
+
+    @trace
+    def agent():
+        return client.messages.create(
+            model="claude-3-5-sonnet-20241022",
+            max_tokens=200,
+            messages=[{"role": "user", "content": "Solve this step by step"}],
+        )
+
+    agent()
+
+    store = get_default_store()
+    runs = store.get_runs()
+    events = store.get_events(runs[0].id)
+    llm_end = [e for e in events if e.type == "llm_end"]
+    assert len(llm_end) >= 1
+    thinking = llm_end[0].data.get("thinking_blocks", [])
+    assert len(thinking) == 1
+    assert "Let me reason step by step" in thinking[0]

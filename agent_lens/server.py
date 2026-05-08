@@ -51,6 +51,11 @@ CSRF_TOKEN: str = secrets.token_hex(32)
 class ForkBody(BaseModel):
     span_id: str
     edited_messages: list[dict[str, Any]] | None = None
+    notes: str | None = None  # Developer hypothesis / reason for this fork
+
+
+class NoteBody(BaseModel):
+    notes: str
 
 
 class InjectBody(BaseModel):
@@ -181,6 +186,14 @@ def create_app(store=None, csrf_token: str | None = None) -> FastAPI:
         css = css_path.read_text(encoding="utf-8") if css_path.exists() else ""
         js = js_path.read_text(encoding="utf-8") if js_path.exists() else ""
 
+        notes_html = ""
+        if run.notes:
+            escaped_notes = html.escape(run.notes)
+            notes_html = f"""<div style="background:#fef9c3;border-left:4px solid #eab308;padding:12px 16px;margin:16px 0;border-radius:6px;font-family:sans-serif">
+<strong style="font-size:0.8rem;text-transform:uppercase;letter-spacing:0.06em;color:#92400e">Fork hypothesis</strong>
+<p style="margin:6px 0 0;color:#713f12">{escaped_notes}</p>
+</div>"""
+
         export_html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -190,6 +203,7 @@ def create_app(store=None, csrf_token: str | None = None) -> FastAPI:
 <style>{css}</style>
 </head>
 <body>
+{notes_html}
 <script>
 window.__AGENT_LENS_EXPORT__ = true;
 window.__AGENT_LENS_DATA__ = JSON.parse(document.getElementById('al-data').textContent);
@@ -258,9 +272,20 @@ window.__AGENT_LENS_DATA__ = JSON.parse(document.getElementById('al-data').textC
             run_id,
             body.span_id,
             edited_messages=body.edited_messages,
+            notes=body.notes,
             store=effective_store,
         )
         return {"status": "forked", "run_id": run_id, "new_run_id": new_run_id}
+
+    @app.post("/runs/{run_id}/note", dependencies=[Depends(require_csrf)])
+    async def add_note(run_id: str, body: NoteBody):
+        """Add or update a developer note on any run (not just forks)."""
+        run = effective_store.get_run(run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail=f"Run {run_id!r} not found")
+        run.notes = body.notes
+        effective_store.save_run(run)
+        return {"status": "ok", "run_id": run_id}
 
     @app.post("/runs/{run_id}/inject", dependencies=[Depends(require_csrf)])
     async def inject_tool(run_id: str, body: InjectBody):

@@ -74,6 +74,22 @@ def _safe_response_dict(response: Any) -> dict:
     return {}
 
 
+def _extract_thinking_blocks(response: Any) -> list[str]:
+    """Extract extended thinking blocks from an Anthropic response, if present."""
+    blocks = []
+    try:
+        content = getattr(response, "content", []) or []
+        for block in content:
+            block_type = getattr(block, "type", None)
+            if block_type == "thinking":
+                thinking_text = getattr(block, "thinking", None)
+                if thinking_text:
+                    blocks.append(thinking_text)
+    except Exception:
+        pass
+    return blocks
+
+
 def patch() -> bool:
     """
     Monkey-patch anthropic's Messages.create.
@@ -138,20 +154,21 @@ def patch() -> bool:
             usage = getattr(response, "usage", None)
             input_tokens = getattr(usage, "input_tokens", 0) if usage else 0
             output_tokens = getattr(usage, "output_tokens", 0) if usage else 0
+            thinking_blocks = _extract_thinking_blocks(response)
 
-            tracer.record_event(
-                EventType.LLM_END,
-                {
-                    "provider": "anthropic",
-                    "model": model,
-                    "latency_ms": latency_ms,
-                    "input_tokens": input_tokens,
-                    "output_tokens": output_tokens,
-                    "cost_usd": _estimate_cost(model, input_tokens, output_tokens),
-                    "response": _safe_response_dict(response),
-                },
-                span_id=span.id,
-            )
+            llm_end_data: dict[str, Any] = {
+                "provider": "anthropic",
+                "model": model,
+                "latency_ms": latency_ms,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "cost_usd": _estimate_cost(model, input_tokens, output_tokens),
+                "response": _safe_response_dict(response),
+            }
+            if thinking_blocks:
+                llm_end_data["thinking_blocks"] = thinking_blocks
+
+            tracer.record_event(EventType.LLM_END, llm_end_data, span_id=span.id)
             tracer.end_span(span, status="ok")
             return response
 

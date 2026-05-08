@@ -20,6 +20,10 @@ try:
     RESPX_AVAILABLE = True
 except ImportError:
     RESPX_AVAILABLE = False
+    class _RespxStub:  # noqa: N801
+        def mock(self, f=None):
+            return f if f else (lambda fn: fn)
+    respx = _RespxStub()  # type: ignore[assignment]
 
 try:
     import openai

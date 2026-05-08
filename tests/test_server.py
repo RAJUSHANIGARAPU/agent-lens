@@ -184,6 +184,31 @@ class TestControlAPI:
         assert new_run is not None
         assert new_run.parent_run_id == run.id
 
+    def test_fork_with_notes_stored(self, client):
+        c, store, csrf = client
+        run = Run(id=str(uuid.uuid4()), name="fork-notes-run", start_time=time.time())
+        store.save_run(run)
+        span = Span(id=str(uuid.uuid4()), run_id=run.id, name="span", type="llm", start_time=time.time())
+        store.save_span(span)
+
+        resp = c.post(
+            f"/runs/{run.id}/fork",
+            json={"span_id": span.id, "notes": "Hypothesis: removing role constraint reduces hallucination"},
+        )
+        assert resp.status_code == 200
+        new_run = store.get_run(resp.json()["new_run_id"])
+        assert new_run.notes == "Hypothesis: removing role constraint reduces hallucination"
+
+    def test_add_note_to_run(self, client):
+        c, store, csrf = client
+        run = Run(id=str(uuid.uuid4()), name="note-run", start_time=time.time())
+        store.save_run(run)
+
+        resp = c.post(f"/runs/{run.id}/note", json={"notes": "Trying a shorter system prompt"})
+        assert resp.status_code == 200
+        updated = store.get_run(run.id)
+        assert updated.notes == "Trying a shorter system prompt"
+
     def test_inject_returns_200(self, client):
         c, store, csrf = client
         run = Run(id=str(uuid.uuid4()), name="inject-run", start_time=time.time())

@@ -169,6 +169,7 @@ class ControlPlane:
         run_id: str,
         span_id: str,
         edited_messages: list[dict] | None = None,
+        notes: str | None = None,
         store: Any | None = None,
     ) -> str:
         """
@@ -204,6 +205,7 @@ class ControlPlane:
             metadata={**parent_run.metadata, "forked_from": run_id, "fork_span_id": span_id},
             parent_run_id=run_id,
             fork_span_id=span_id,
+            notes=notes,
         )
         effective_store.save_run(new_run)
 

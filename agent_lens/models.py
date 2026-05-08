@@ -88,6 +88,7 @@ class Run(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
     parent_run_id: str | None = None  # Set when this run is a fork
     fork_span_id: str | None = None  # The span from which this run was forked
+    notes: str | None = None  # Developer annotation: why this fork was created
 
     @property
     def duration_ms(self) -> float | None:

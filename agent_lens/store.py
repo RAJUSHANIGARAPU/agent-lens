@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS runs (
     status        TEXT NOT NULL DEFAULT 'running',
     parent_run_id TEXT,
     fork_span_id  TEXT,
+    notes         TEXT,
     metadata      TEXT DEFAULT '{}'
 );
 
@@ -105,6 +106,10 @@ class Store:
         with self._write_lock:
             conn = self._get_conn()
             conn.executescript(_SCHEMA)
+            # Migrate existing databases that predate the notes column
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(runs)")}
+            if "notes" not in cols:
+                conn.execute("ALTER TABLE runs ADD COLUMN notes TEXT")
             conn.commit()
 
     # ------------------------------------------------------------------
@@ -118,8 +123,8 @@ class Store:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO runs
-                    (id, name, start_time, end_time, status, parent_run_id, fork_span_id, metadata)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, name, start_time, end_time, status, parent_run_id, fork_span_id, notes, metadata)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     run.id,
@@ -129,6 +134,7 @@ class Store:
                     run.status if isinstance(run.status, str) else run.status.value,
                     run.parent_run_id,
                     run.fork_span_id,
+                    run.notes,
                     json.dumps(run.metadata),
                 ),
             )
@@ -290,6 +296,7 @@ class Store:
             metadata=json.loads(row["metadata"] or "{}"),
             parent_run_id=row.get("parent_run_id"),
             fork_span_id=row.get("fork_span_id"),
+            notes=row.get("notes"),
         )
 
     @staticmethod
