@@ -170,6 +170,7 @@ class ControlPlane:
         span_id: str,
         edited_messages: list[dict] | None = None,
         notes: str | None = None,
+        expected_output: str | None = None,
         store: Any | None = None,
     ) -> str:
         """
@@ -206,6 +207,7 @@ class ControlPlane:
             parent_run_id=run_id,
             fork_span_id=span_id,
             notes=notes,
+            expected_output=expected_output,
         )
         effective_store.save_run(new_run)
 

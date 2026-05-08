@@ -30,8 +30,9 @@ CREATE TABLE IF NOT EXISTS runs (
     status        TEXT NOT NULL DEFAULT 'running',
     parent_run_id TEXT,
     fork_span_id  TEXT,
-    notes         TEXT,
-    metadata      TEXT DEFAULT '{}'
+    notes           TEXT,
+    expected_output TEXT,
+    metadata        TEXT DEFAULT '{}'
 );
 
 CREATE INDEX IF NOT EXISTS idx_runs_start_time ON runs(start_time DESC);
@@ -106,10 +107,12 @@ class Store:
         with self._write_lock:
             conn = self._get_conn()
             conn.executescript(_SCHEMA)
-            # Migrate existing databases that predate the notes column
+            # Migrate existing databases that predate new columns
             cols = {row[1] for row in conn.execute("PRAGMA table_info(runs)")}
             if "notes" not in cols:
                 conn.execute("ALTER TABLE runs ADD COLUMN notes TEXT")
+            if "expected_output" not in cols:
+                conn.execute("ALTER TABLE runs ADD COLUMN expected_output TEXT")
             conn.commit()
 
     # ------------------------------------------------------------------
@@ -123,8 +126,8 @@ class Store:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO runs
-                    (id, name, start_time, end_time, status, parent_run_id, fork_span_id, notes, metadata)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, name, start_time, end_time, status, parent_run_id, fork_span_id, notes, expected_output, metadata)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     run.id,
@@ -135,6 +138,7 @@ class Store:
                     run.parent_run_id,
                     run.fork_span_id,
                     run.notes,
+                    run.expected_output,
                     json.dumps(run.metadata),
                 ),
             )
@@ -297,6 +301,7 @@ class Store:
             parent_run_id=row.get("parent_run_id"),
             fork_span_id=row.get("fork_span_id"),
             notes=row.get("notes"),
+            expected_output=row.get("expected_output"),
         )
 
     @staticmethod

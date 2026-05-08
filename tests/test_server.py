@@ -209,6 +209,21 @@ class TestControlAPI:
         updated = store.get_run(run.id)
         assert updated.notes == "Trying a shorter system prompt"
 
+    def test_fork_with_expected_output_stored(self, client):
+        c, store, csrf = client
+        run = Run(id=str(uuid.uuid4()), name="expected-run", start_time=time.time())
+        store.save_run(run)
+        span = Span(id=str(uuid.uuid4()), run_id=run.id, name="span", type="llm", start_time=time.time())
+        store.save_span(span)
+
+        resp = c.post(
+            f"/runs/{run.id}/fork",
+            json={"span_id": span.id, "notes": "Shorter prompt", "expected_output": "concise"},
+        )
+        assert resp.status_code == 200
+        forked = store.get_run(resp.json()["new_run_id"])
+        assert forked.expected_output == "concise"
+
     def test_inject_returns_200(self, client):
         c, store, csrf = client
         run = Run(id=str(uuid.uuid4()), name="inject-run", start_time=time.time())
@@ -291,6 +306,92 @@ class TestDashboard:
         data = resp.json()
         assert "version" in data
         assert data["host"] == "127.0.0.1"
+
+
+# ----------------------------------------------------------------
+# Lineage and Diff
+# ----------------------------------------------------------------
+
+class TestLineageAndDiff:
+    def test_lineage_single_run(self, client):
+        c, store, csrf = client
+        run = Run(id=str(uuid.uuid4()), name="root", start_time=time.time())
+        store.save_run(run)
+
+        resp = c.get(f"/runs/{run.id}/lineage")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["depth"] == 1
+        assert data["lineage"][0]["id"] == run.id
+
+    def test_lineage_fork_chain(self, client):
+        c, store, csrf = client
+        root = Run(id=str(uuid.uuid4()), name="root", start_time=time.time())
+        store.save_run(root)
+        fork1 = Run(
+            id=str(uuid.uuid4()), name="fork1", start_time=time.time(),
+            parent_run_id=root.id, notes="hypothesis A",
+        )
+        store.save_run(fork1)
+        fork2 = Run(
+            id=str(uuid.uuid4()), name="fork2", start_time=time.time(),
+            parent_run_id=fork1.id, notes="hypothesis B",
+        )
+        store.save_run(fork2)
+
+        resp = c.get(f"/runs/{fork2.id}/lineage")
+        assert resp.status_code == 200
+        chain = resp.json()["lineage"]
+        assert len(chain) == 3
+        assert chain[0]["id"] == root.id      # oldest first
+        assert chain[1]["notes"] == "hypothesis A"
+        assert chain[2]["notes"] == "hypothesis B"
+
+    def test_diff_two_runs(self, client):
+        c, store, csrf = client
+        from agent_lens.models import Event, EventType
+
+        run_a = Run(id=str(uuid.uuid4()), name="run-a", start_time=time.time())
+        run_b = Run(id=str(uuid.uuid4()), name="run-b", start_time=time.time(),
+                    expected_output="concise")
+        store.save_run(run_a)
+        store.save_run(run_b)
+
+        span_a = Span(id=str(uuid.uuid4()), run_id=run_a.id, name="llm", type="llm", start_time=time.time())
+        span_b = Span(id=str(uuid.uuid4()), run_id=run_b.id, name="llm", type="llm", start_time=time.time())
+        store.save_span(span_a)
+        store.save_span(span_b)
+
+        store.save_event(Event(run_id=run_a.id, span_id=span_a.id, type=EventType.LLM_START,
+                               data={"messages": [{"role": "user", "content": "Tell me about Python"}]}))
+        store.save_event(Event(run_id=run_a.id, span_id=span_a.id, type=EventType.LLM_END,
+                               data={"latency_ms": 1200, "input_tokens": 10, "output_tokens": 80,
+                                     "cost_usd": 0.001, "response": {"content": "Python is verbose and powerful."}}))
+        store.save_event(Event(run_id=run_b.id, span_id=span_b.id, type=EventType.LLM_START,
+                               data={"messages": [{"role": "user", "content": "Briefly: Python?"}]}))
+        store.save_event(Event(run_id=run_b.id, span_id=span_b.id, type=EventType.LLM_END,
+                               data={"latency_ms": 800, "input_tokens": 8, "output_tokens": 20,
+                                     "cost_usd": 0.0005, "response": {"content": "concise and readable."}}))
+
+        resp = c.get(f"/runs/{run_a.id}/diff/{run_b.id}")
+        assert resp.status_code == 200
+        data = resp.json()
+
+        assert data["messages_diff"][0]["changed"] is True
+        assert data["metrics_delta"]["latency_ms"]["delta"] == -400.0
+        assert data["response_diff"]["changed"] is True
+
+        ar = data["assertion_result"]
+        assert ar is not None
+        assert ar["expected_output"] == "concise"
+        assert ar["passed_in_b"] is True
+        assert ar["passed_in_a"] is False
+        assert ar["verdict"] == "improved"
+
+    def test_diff_not_found(self, client):
+        c, store, csrf = client
+        resp = c.get("/runs/nonexistent/diff/also-nonexistent")
+        assert resp.status_code == 404
 
 
 # ----------------------------------------------------------------

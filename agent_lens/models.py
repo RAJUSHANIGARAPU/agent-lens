@@ -89,6 +89,7 @@ class Run(BaseModel):
     parent_run_id: str | None = None  # Set when this run is a fork
     fork_span_id: str | None = None  # The span from which this run was forked
     notes: str | None = None  # Developer annotation: why this fork was created
+    expected_output: str | None = None  # Assertion: what success looks like for this fork
 
     @property
     def duration_ms(self) -> float | None:
