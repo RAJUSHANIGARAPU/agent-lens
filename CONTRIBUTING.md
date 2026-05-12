@@ -12,14 +12,19 @@ Thank you for your interest in contributing! agent-lens is an early-stage open-s
 
 ## Good First Issues
 
-If you're new to the project, look for issues tagged `good first issue`. Some concrete ones to start with:
+If you're new to the project, look for issues tagged `good first issue`:
 
-- Add a LlamaIndex callback handler (follow the pattern in `agent_lens/integrations/langchain.py`)
-- Add async-aware pause/resume using `asyncio.Event`
-- Add a `--json` flag to `agent-lens export` for JSON output instead of HTML
-- Improve the timeline flame graph with zoom/pan support
-- Add a "copy span ID" button to the inspector
-- Write a test for the SSE reconnection logic
+| Area | Task |
+|------|------|
+| **Integrations** | Add a `LlamaIndexCallbackHandler` — mirror `agent_lens/integrations/langchain.py` |
+| **Integrations** | Add AutoGen / CrewAI support via `@agent_lens.trace` wrapper |
+| **CLI** | Add `agent-lens runs` to list recent runs in the terminal |
+| **CLI** | Add `agent-lens diff <run_a> <run_b>` shorthand for the diff endpoint |
+| **CLI** | Add `--json` flag to `agent-lens export` for JSON output instead of HTML |
+| **Dashboard** | Show `cost_usd` in the run list table |
+| **Dashboard** | Add a "copy curl command" button next to each run |
+| **Tests** | Add integration test for `GET /lineage` with a 3-deep fork chain |
+| **Async** | Async-aware pause/resume using `asyncio.Event` |
 
 ## Development Setup
 
@@ -38,7 +43,8 @@ pytest tests/ -v
 ## Running the Demo
 
 ```bash
-python examples/04_pause_and_fork.py
+# No API key needed — uses pre-canned responses
+python examples/07_demo_mock.py
 ```
 
 ## Code Style

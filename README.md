@@ -16,6 +16,7 @@ State a hypothesis. Fork. Compare. Know if it actually worked.
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
 [![Coverage](https://codecov.io/gh/RAJUSHANIGARAPU/agent-lens/branch/main/graph/badge.svg)](https://codecov.io/gh/RAJUSHANIGARAPU/agent-lens)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/RAJUSHANIGARAPU/agent-lens/blob/main/notebooks/quickstart.ipynb)
 
 ---
 
