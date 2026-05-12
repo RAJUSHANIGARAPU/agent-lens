@@ -25,6 +25,11 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg ttyd
+
       - name: Install agent-lens
         run: pip install -e ".[dev]"
 
@@ -32,6 +37,7 @@ jobs:
         uses: charmbracelet/vhs-action@v2
         with:
           path: demo.tape
+          install-dependencies: false
 
       - name: Commit and push demo.gif
         run: |
