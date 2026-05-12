@@ -1,0 +1,42 @@
+name: Generate Demo GIF
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - demo.tape
+      - examples/07_demo_mock.py
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    name: Render demo.gif with VHS
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install agent-lens
+        run: pip install -e ".[dev]"
+
+      - name: Render demo.gif
+        uses: charmbracelet/vhs-action@v2
+        with:
+          path: demo.tape
+
+      - name: Commit and push demo.gif
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add demo.gif
+          git diff --staged --quiet && echo "demo.gif unchanged, skipping commit" || \
+            git commit -m "chore: regenerate demo.gif [skip ci]" && git push
