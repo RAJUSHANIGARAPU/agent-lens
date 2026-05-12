@@ -19,9 +19,9 @@ State a hypothesis. Fork. Compare. Know if it actually worked.
 
 ---
 
-> **Demo** — *Pause a live agent, edit messages, fork, then `GET /diff` returns `verdict: improved`.*
->
-> *(30-second screen recording landing soon)*
+![agent-lens demo](demo.gif)
+
+> State a hypothesis. Fork. Run `GET /diff`. Get `verdict: "improved"` — with numbers.
 
 ---
 
