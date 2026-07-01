@@ -514,6 +514,32 @@ class TestSearchAPI:
         assert data["count"] == 1
         assert data["results"][0]["status"] == "error"
 
+    def test_search_lineage_absent_by_default(self, client):
+        c, store, csrf = client
+        _seed_run_with_llm(store, name="root",
+                           messages=[{"role": "user", "content": "lineage default marker"}],
+                           response="x")
+        resp = c.get("/search", params={"q": "marker"})
+        assert resp.status_code == 200
+        assert "lineage" not in resp.json()["results"][0]
+
+    def test_search_include_lineage(self, client):
+        c, store, csrf = client
+        root = _seed_run_with_llm(store, name="root run",
+                                  messages=[{"role": "user", "content": "root prompt"}],
+                                  response="root out")
+        fork = _seed_run_with_llm(store, name="fork run",
+                                  messages=[{"role": "user", "content": "cross lineage marker"}],
+                                  response="fork out", expected_output="fork",
+                                  parent_run_id=root.id)
+        resp = c.get("/search", params={"q": "cross", "include_lineage": "true"})
+        assert resp.status_code == 200
+        result = next(r for r in resp.json()["results"] if r["run_id"] == fork.id)
+        chain = result["lineage"]
+        assert [c["id"] for c in chain] == [root.id, fork.id]  # oldest first
+        assert chain[0]["name"] == "root run"
+        assert set(chain[0].keys()) == {"id", "name", "notes", "expected_output", "status"}
+
     def test_search_hostile_query_does_not_500(self, client):
         c, store, csrf = client
         _seed_run_with_llm(store, name="x", messages=[{"role": "user", "content": "hello"}],

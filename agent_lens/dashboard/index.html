@@ -37,6 +37,13 @@
 
     <div class="spacer"></div>
 
+    <div id="search-box" class="search-box">
+      <input type="text" id="fts-input" class="fts-input"
+             placeholder="Search runs…" autocomplete="off" spellcheck="false"
+             aria-label="Search runs" aria-expanded="false" aria-controls="search-results" />
+      <div id="search-results" class="search-results" role="listbox" style="display:none;"></div>
+    </div>
+
     <span class="muted" style="font-size:11px;font-family:monospace;">
       <kbd class="kbd">/</kbd> search &nbsp;
       <kbd class="kbd">J/K</kbd> nav &nbsp;
