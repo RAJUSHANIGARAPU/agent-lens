@@ -108,6 +108,51 @@ class TestSearchRuns:
         assert run.id in [h["run_id"] for h in store.search_runs("delayedmarkertoken")]
 
 
+class TestSearchLineage:
+    def _fork(self, store, *, name, parent_run_id, notes=None, expected_output=None,
+              message=""):
+        run = Run(id=str(uuid.uuid4()), name=name, start_time=time.time(),
+                  status=RunStatus.COMPLETED, parent_run_id=parent_run_id,
+                  notes=notes, expected_output=expected_output)
+        store.save_run(run)
+        span = Span(id=str(uuid.uuid4()), run_id=run.id, name="llm", type="llm",
+                    start_time=time.time())
+        store.save_span(span)
+        if message:
+            store.save_event(Event(run_id=run.id, span_id=span.id, type=EventType.LLM_START,
+                                   data={"messages": [{"role": "user", "content": message}]}))
+        store.reindex_run(run.id)
+        return run
+
+    def test_lineage_absent_by_default(self, store):
+        run = _seed(store, name="x", message="lineage-default-token")
+        hits = store.search_runs("lineage-default-token")
+        assert run.id in [h["run_id"] for h in hits]
+        assert all("lineage" not in h for h in hits)
+
+    def test_lineage_included_when_requested(self, store):
+        root = _seed(store, name="root run")
+        fork1 = self._fork(store, name="fork one", parent_run_id=root.id, notes="hypothesis A")
+        fork2 = self._fork(store, name="fork two", parent_run_id=fork1.id,
+                           notes="hypothesis B", expected_output="concise",
+                           message="cross-lineage-token")
+
+        hits = store.search_runs("cross-lineage-token", include_lineage=True)
+        hit = next(h for h in hits if h["run_id"] == fork2.id)
+        chain = hit["lineage"]
+        assert [c["id"] for c in chain] == [root.id, fork1.id, fork2.id]  # oldest first
+        assert chain[1]["notes"] == "hypothesis A"
+        assert chain[2]["notes"] == "hypothesis B"
+        assert chain[2]["expected_output"] == "concise"
+        assert set(chain[0].keys()) == {"id", "name", "notes", "expected_output", "status"}
+
+    def test_lineage_root_is_single_entry(self, store):
+        root = _seed(store, name="solo", message="solo-lineage-token")
+        hits = store.search_runs("solo-lineage-token", include_lineage=True)
+        hit = next(h for h in hits if h["run_id"] == root.id)
+        assert [c["id"] for c in hit["lineage"]] == [root.id]
+
+
 class TestLikeFallback:
     @pytest.fixture
     def like_store(self, tmp_path):
