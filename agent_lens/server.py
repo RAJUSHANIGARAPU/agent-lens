@@ -18,7 +18,7 @@ import asyncio
 import html
 import json
 import secrets
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +28,8 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from agent_lens._textutil import extract_response_text
+from agent_lens.export import assertion_passed, ctx_lines, iter_runs
 from agent_lens.store import get_default_store
 from agent_lens.tracer import EventBus
 
@@ -71,6 +73,18 @@ async def require_csrf(x_agent_lens_token: str | None = Header(default=None)) ->
     """Dependency that enforces the per-session CSRF token."""
     if x_agent_lens_token != CSRF_TOKEN:
         raise HTTPException(status_code=403, detail="Invalid or missing X-Agent-Lens-Token header")
+
+
+# ------------------------------------------------------------------
+# ctx export helpers
+# ------------------------------------------------------------------
+
+def _validate_format(fmt: str) -> str:
+    """Normalize and validate the export format query parameter."""
+    fmt = (fmt or "ndjson").lower()
+    if fmt not in ("ndjson", "codex"):
+        raise HTTPException(status_code=400, detail="format must be 'ndjson' or 'codex'")
+    return fmt
 
 
 # ------------------------------------------------------------------
@@ -220,6 +234,77 @@ window.__AGENT_LENS_DATA__ = JSON.parse(document.getElementById('al-data').textC
             headers={"Content-Disposition": f'attachment; filename="run-{run_id[:8]}.html"'},
         )
 
+    @app.get("/runs/{run_id}/export/ctx")
+    async def export_run_ctx(run_id: str, format: str = "ndjson"):
+        """Export a single run for external search indexing.
+
+        format=ndjson (default) emits one provider-neutral document with the
+        run's full text and structured outcome labels. format=codex emits the
+        run as Codex-format session records that `ctx import --path` can ingest.
+        """
+        run = effective_store.get_run(run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail=f"Run {run_id!r} not found")
+        fmt = _validate_format(format)
+        content = "".join(ctx_lines(effective_store, run, fmt))
+        suffix = "codex" if fmt == "codex" else "ctx"
+        return Response(
+            content=content,
+            media_type="application/x-ndjson",
+            headers={"Content-Disposition": f'attachment; filename="run-{run_id[:8]}.{suffix}.jsonl"'},
+        )
+
+    @app.get("/export/ctx")
+    async def export_corpus_ctx(
+        format: str = "ndjson", status: str | None = None, limit: int | None = None
+    ):
+        """Stream the whole run corpus as NDJSON for external search indexing.
+
+        One line per run. format and status/limit filters mirror the single-run
+        export. Streamed so the full database is never buffered in memory.
+        """
+        fmt = _validate_format(format)
+
+        def generate() -> Iterator[str]:
+            for run in iter_runs(effective_store, status, limit):
+                yield from ctx_lines(effective_store, run, fmt)
+
+        filename = f"agent-lens-corpus.{'codex' if fmt == 'codex' else 'ctx'}.jsonl"
+        return StreamingResponse(
+            generate(),
+            media_type="application/x-ndjson",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    @app.get("/search")
+    async def search(q: str = "", status: str | None = None, limit: int = 50, offset: int = 0):
+        """Full-text search over run records (name, notes, assertion, messages,
+        responses, chain-of-thought). Returns ranked hits with match snippets."""
+        query = (q or "").strip()
+        if not query:
+            raise HTTPException(status_code=400, detail="query parameter 'q' is required")
+
+        hits = effective_store.search_runs(query, status=status, limit=limit, offset=offset)
+        results = []
+        for hit in hits:
+            entry = {
+                "run_id": hit["run_id"],
+                "name": hit["name"],
+                "status": hit["status"],
+                "score": hit["score"],
+                "snippet": hit["snippet"],
+            }
+            run = effective_store.get_run(hit["run_id"])
+            if run is not None:
+                entry["notes"] = run.notes
+                entry["expected_output"] = run.expected_output
+                entry["is_fork"] = run.is_fork
+                assertion = assertion_passed(run, effective_store.get_events(run.id))
+                if assertion is not None:
+                    entry["assertion_passed"] = assertion
+            results.append(entry)
+        return {"query": query, "count": len(results), "results": results}
+
     # ------------------------------------------------------------------
     # Control API (CSRF-protected)
     # ------------------------------------------------------------------
@@ -287,6 +372,7 @@ window.__AGENT_LENS_DATA__ = JSON.parse(document.getElementById('al-data').textC
             raise HTTPException(status_code=404, detail=f"Run {run_id!r} not found")
         run.notes = body.notes
         effective_store.save_run(run)
+        effective_store.reindex_run(run_id)
         return {"status": "ok", "run_id": run_id}
 
     @app.get("/runs/{run_id}/lineage")
@@ -350,23 +436,6 @@ window.__AGENT_LENS_DATA__ = JSON.parse(document.getElementById('al-data').textC
                     return e.data
             return {}
 
-        def _extract_text(response: dict) -> str:
-            """Best-effort extraction of response text."""
-            for key in ("content", "choices", "text"):
-                if key in response:
-                    val = response[key]
-                    if isinstance(val, str):
-                        return val
-                    if isinstance(val, list) and val:
-                        first = val[0]
-                        if isinstance(first, dict):
-                            return (
-                                first.get("text") or
-                                first.get("message", {}).get("content", "") or
-                                str(first)
-                            )
-            return str(response)
-
         start_a = _first_llm_start(events_a)
         start_b = _first_llm_start(events_b)
         end_a = _first_llm_end(events_a)
@@ -403,8 +472,8 @@ window.__AGENT_LENS_DATA__ = JSON.parse(document.getElementById('al-data').textC
             "cost_usd": _delta(end_a.get("cost_usd"), end_b.get("cost_usd")),
         }
 
-        resp_a = _extract_text(end_a.get("response", {}))
-        resp_b = _extract_text(end_b.get("response", {}))
+        resp_a = extract_response_text(end_a.get("response", {}))
+        resp_b = extract_response_text(end_b.get("response", {}))
 
         assertion_result = None
         expected = run_b.expected_output or run_a.expected_output

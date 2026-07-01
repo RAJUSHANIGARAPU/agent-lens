@@ -434,6 +434,198 @@ class TestExport:
 
 
 # ----------------------------------------------------------------
+# Search
+# ----------------------------------------------------------------
+
+def _seed_run_with_llm(store, *, name, messages, response, expected_output=None,
+                       status=RunStatus.COMPLETED, parent_run_id=None):
+    """Seed a completed run with one llm_start/llm_end pair. Returns the Run."""
+    from agent_lens.models import Event, EventType
+
+    run = Run(id=str(uuid.uuid4()), name=name, start_time=time.time(),
+              status=status, expected_output=expected_output, parent_run_id=parent_run_id)
+    store.save_run(run)
+    span = Span(id=str(uuid.uuid4()), run_id=run.id, name="llm", type="llm", start_time=time.time())
+    store.save_span(span)
+    store.save_event(Event(run_id=run.id, span_id=span.id, type=EventType.LLM_START,
+                           data={"messages": messages}))
+    store.save_event(Event(run_id=run.id, span_id=span.id, type=EventType.LLM_END,
+                           data={"latency_ms": 500, "total_tokens": 42, "cost_usd": 0.001,
+                                 "response": {"content": response}}))
+    return run
+
+
+class TestSearchAPI:
+    def test_search_finds_by_message_text(self, client):
+        c, store, csrf = client
+        target = _seed_run_with_llm(
+            store, name="backoff run",
+            messages=[{"role": "user", "content": "explain exponential backoff for retries"}],
+            response="use jitter",
+        )
+        _seed_run_with_llm(
+            store, name="unrelated",
+            messages=[{"role": "user", "content": "what is a monad"}], response="a burrito",
+        )
+        resp = c.get("/search", params={"q": "backoff"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["count"] == 1
+        assert data["results"][0]["run_id"] == target.id
+        assert "backoff" in data["results"][0]["snippet"].lower()
+
+    def test_search_reports_assertion_result(self, client):
+        c, store, csrf = client
+        _seed_run_with_llm(
+            store, name="assertive",
+            messages=[{"role": "user", "content": "be brief about caching"}],
+            response="concise and clear", expected_output="concise",
+        )
+        resp = c.get("/search", params={"q": "caching"})
+        assert resp.status_code == 200
+        result = resp.json()["results"][0]
+        assert result["expected_output"] == "concise"
+        assert result["assertion_passed"] is True
+
+    def test_search_no_match(self, client):
+        c, store, csrf = client
+        _seed_run_with_llm(store, name="only", messages=[{"role": "user", "content": "hello"}],
+                           response="hi")
+        resp = c.get("/search", params={"q": "nonexistentterm"})
+        assert resp.status_code == 200
+        assert resp.json()["count"] == 0
+
+    def test_search_requires_query(self, client):
+        c, store, csrf = client
+        assert c.get("/search").status_code == 400
+        assert c.get("/search", params={"q": "   "}).status_code == 400
+
+    def test_search_status_filter(self, client):
+        c, store, csrf = client
+        _seed_run_with_llm(store, name="done one",
+                           messages=[{"role": "user", "content": "shared keyword alpha"}],
+                           response="x", status=RunStatus.COMPLETED)
+        _seed_run_with_llm(store, name="errored one",
+                           messages=[{"role": "user", "content": "shared keyword alpha"}],
+                           response="y", status=RunStatus.ERROR)
+        resp = c.get("/search", params={"q": "alpha", "status": "error"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["count"] == 1
+        assert data["results"][0]["status"] == "error"
+
+    def test_search_hostile_query_does_not_500(self, client):
+        c, store, csrf = client
+        _seed_run_with_llm(store, name="x", messages=[{"role": "user", "content": "hello"}],
+                           response="hi")
+        resp = c.get("/search", params={"q": "foo:bar-baz*"})
+        assert resp.status_code == 200
+
+
+# ----------------------------------------------------------------
+# ctx export
+# ----------------------------------------------------------------
+
+class TestCtxExportAPI:
+    def test_single_run_ndjson(self, client):
+        c, store, csrf = client
+        run = _seed_run_with_llm(
+            store, name="export me",
+            messages=[{"role": "user", "content": "summarize the report"}],
+            response="here is the summary", expected_output="summary",
+        )
+        run.notes = "trying a terser prompt"
+        store.save_run(run)
+
+        resp = c.get(f"/runs/{run.id}/export/ctx")
+        assert resp.status_code == 200
+        assert "application/x-ndjson" in resp.headers["content-type"]
+        lines = [ln for ln in resp.text.splitlines() if ln.strip()]
+        assert len(lines) == 1
+        doc = json.loads(lines[0])
+        assert doc["id"] == run.id
+        assert doc["source"] == "agent-lens"
+        assert "summarize the report" in doc["text"]
+        assert "trying a terser prompt" in doc["text"]
+        assert doc["metadata"]["status"] == "completed"
+        assert doc["metadata"]["assertion_passed"] is True
+        assert doc["metadata"]["total_tokens"] == 42
+
+    def test_single_run_codex_format(self, client):
+        c, store, csrf = client
+        run = _seed_run_with_llm(
+            store, name="codex run",
+            messages=[{"role": "user", "content": "hello there"}], response="general kenobi",
+        )
+        resp = c.get(f"/runs/{run.id}/export/ctx", params={"format": "codex"})
+        assert resp.status_code == 200
+        records = [json.loads(ln) for ln in resp.text.splitlines() if ln.strip()]
+        assert records[0]["type"] == "session_meta"
+        assert records[0]["payload"]["originator"] == "agent-lens"
+        types = [r["type"] for r in records]
+        assert "response_item" in types
+        assert "event_msg" in types
+
+    def test_export_not_found(self, client):
+        c, store, csrf = client
+        resp = c.get("/runs/does-not-exist/export/ctx")
+        assert resp.status_code == 404
+
+    def test_invalid_format_rejected(self, client):
+        c, store, csrf = client
+        run = _seed_run_with_llm(store, name="x", messages=[{"role": "user", "content": "hi"}],
+                                 response="yo")
+        resp = c.get(f"/runs/{run.id}/export/ctx", params={"format": "xml"})
+        assert resp.status_code == 400
+
+    def test_corpus_export_line_per_run(self, client):
+        c, store, csrf = client
+        root = _seed_run_with_llm(store, name="root",
+                                  messages=[{"role": "user", "content": "root prompt"}],
+                                  response="root response")
+        _seed_run_with_llm(store, name="fork",
+                           messages=[{"role": "user", "content": "fork prompt"}],
+                           response="fork response", expected_output="fork",
+                           parent_run_id=root.id)
+        resp = c.get("/export/ctx")
+        assert resp.status_code == 200
+        docs = [json.loads(ln) for ln in resp.text.splitlines() if ln.strip()]
+        assert len(docs) == 2
+        forks = [d for d in docs if d["metadata"]["is_fork"]]
+        assert len(forks) == 1
+        assert forks[0]["metadata"]["parent_run_id"] == root.id
+        assert forks[0]["metadata"]["assertion_passed"] is True
+
+    def test_corpus_export_exceeds_default_page(self, client):
+        """Guards against the get_runs() 100-row default silently truncating."""
+        c, store, csrf = client
+        for i in range(105):
+            run = Run(id=str(uuid.uuid4()), name=f"run-{i}", start_time=time.time(),
+                      status=RunStatus.COMPLETED)
+            store.save_run(run)
+        resp = c.get("/export/ctx")
+        assert resp.status_code == 200
+        docs = [ln for ln in resp.text.splitlines() if ln.strip()]
+        assert len(docs) == 105
+
+    def test_corpus_export_handles_non_json_native_data(self, client):
+        """Nested/odd event data must not 500 the export (json default=str)."""
+        c, store, csrf = client
+        from agent_lens.models import Event, EventType
+
+        run = Run(id=str(uuid.uuid4()), name="weird", start_time=time.time(),
+                  status=RunStatus.COMPLETED)
+        store.save_run(run)
+        span = Span(id=str(uuid.uuid4()), run_id=run.id, name="llm", type="llm",
+                    start_time=time.time())
+        store.save_span(span)
+        store.save_event(Event(run_id=run.id, span_id=span.id, type=EventType.LLM_END,
+                               data={"response": {"content": "ok"}, "nested": {"a": {"b": [1, 2]}}}))
+        resp = c.get("/export/ctx")
+        assert resp.status_code == 200
+
+
+# ----------------------------------------------------------------
 # SSE stream (async)
 # ----------------------------------------------------------------
 
