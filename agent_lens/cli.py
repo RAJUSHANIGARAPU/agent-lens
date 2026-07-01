@@ -7,6 +7,8 @@ Commands:
     agent-lens dashboard [--port 7878]
     agent-lens replay <file.agentlens>
     agent-lens export <run_id> [--output file.html]
+    agent-lens search <query> [--status S] [--limit N]
+    agent-lens mcp
     agent-lens version
 """
 
@@ -219,6 +221,66 @@ def export_ctx(
             count += 1
 
     typer.echo(f"Exported {count} run(s) to {out_path}")
+
+
+@app.command()
+def search(
+    query: str = typer.Argument(..., help="Search terms; multiple terms are ANDed"),
+    status: str | None = typer.Option(None, "--status", help="Only search runs with this status"),
+    limit: int = typer.Option(50, "--limit", "-n", help="Maximum number of results"),
+) -> None:
+    """Full-text search over stored runs (name, notes, messages, responses)."""
+    query = query.strip()
+    if not query:
+        typer.echo("Error: a non-empty search query is required.", err=True)
+        raise typer.Exit(1)
+
+    from agent_lens.store import get_default_store
+
+    store = get_default_store()
+    hits = store.search_runs(query, status=status, limit=limit)
+
+    if not hits:
+        typer.echo(f"No runs matched {query!r}.")
+        return
+
+    name_width = max(len(hit["name"] or "") for hit in hits)
+    name_width = min(max(name_width, len("NAME")), 40)
+    status_width = max(
+        (len(hit["status"] or "") for hit in hits), default=len("STATUS")
+    )
+    status_width = max(status_width, len("STATUS"))
+
+    header = f"{'NAME':<{name_width}}  {'STATUS':<{status_width}}  SNIPPET"
+    typer.echo(header)
+    typer.echo("-" * len(header))
+    for hit in hits:
+        name = (hit["name"] or "")[:name_width]
+        run_status = hit["status"] or ""
+        snippet = " ".join((hit["snippet"] or "").split())
+        typer.echo(f"{name:<{name_width}}  {run_status:<{status_width}}  {snippet}")
+        typer.echo(f"  run id: {hit['run_id']}")
+
+    typer.echo(f"\n{len(hits)} result(s).")
+
+
+@app.command()
+def mcp() -> None:
+    """Run the MCP server (stdio) so an agent can search run history in-loop.
+
+    Requires the optional 'mcp' extra: pip install 'agentlens-tracer[mcp]'.
+    """
+    from agent_lens.mcp_server import main as run_mcp
+
+    try:
+        run_mcp()  # imports the optional 'mcp' package lazily inside
+    except ImportError:
+        typer.echo(
+            "Error: the MCP server needs the 'mcp' extra. "
+            "Install it with: pip install 'agentlens-tracer[mcp]'",
+            err=True,
+        )
+        raise typer.Exit(1) from None
 
 
 @app.command()

@@ -358,19 +358,54 @@ class Store:
         status: str | None = None,
         limit: int = 50,
         offset: int = 0,
+        include_lineage: bool = False,
     ) -> list[dict[str, Any]]:
         """Full-text search over run records.
 
         Returns ranked hits as dicts with run_id, name, status, score (bm25;
         None in fallback mode) and a highlighted snippet. Uses SQLite FTS5 when
         available and degrades to a substring scan otherwise.
+
+        When ``include_lineage`` is True, each hit also carries a ``lineage``
+        list: the run's fork ancestry chain (walking parent_run_id upward),
+        oldest ancestor first, each entry being
+        ``{id, name, notes, expected_output, status}``.
         """
         query = (query or "").strip()
         if not query:
             return []
         if self._fts_enabled:
-            return self._search_fts(query, status, limit, offset)
-        return self._search_like(query, status, limit, offset)
+            hits = self._search_fts(query, status, limit, offset)
+        else:
+            hits = self._search_like(query, status, limit, offset)
+        if include_lineage:
+            for hit in hits:
+                hit["lineage"] = self._lineage_for(hit["run_id"])
+        return hits
+
+    def _lineage_for(self, run_id: str) -> list[dict[str, Any]]:
+        """Return the fork ancestry chain for a run, oldest ancestor first.
+
+        Walks parent_run_id upward starting from ``run_id`` itself. Each entry
+        is ``{id, name, notes, expected_output, status}``.
+        """
+        chain: list[dict[str, Any]] = []
+        current = self.get_run(run_id)
+        while current is not None:
+            chain.append(
+                {
+                    "id": current.id,
+                    "name": current.name,
+                    "notes": current.notes,
+                    "expected_output": current.expected_output,
+                    "status": getattr(current.status, "value", current.status),
+                }
+            )
+            current = (
+                self.get_run(current.parent_run_id) if current.parent_run_id else None
+            )
+        chain.reverse()
+        return chain
 
     def _search_fts(
         self, query: str, status: str | None, limit: int, offset: int

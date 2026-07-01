@@ -213,6 +213,7 @@ Query parameters:
 - `q` (str, required) — search terms; multiple terms are ANDed
 - `status` (str) — restrict to runs with this status
 - `limit` (int, default 50), `offset` (int, default 0)
+- `include_lineage` (bool, default `false`) — when `true`, each result carries a `lineage` list: the run's fork ancestry chain (oldest ancestor first), each entry `{id, name, notes, expected_output, status}`
 
 Response:
 ```json
@@ -229,7 +230,7 @@ Response:
   ]
 }
 ```
-`assertion_passed` is present only when the run has an `expected_output`. Returns `400` if `q` is empty.
+`assertion_passed` is present only when the run has an `expected_output`. When `include_lineage=true` each result gains a `lineage` array (oldest ancestor first). Returns `400` if `q` is empty.
 
 ### `GET /runs/{run_id}/export/ctx`
 Export a single run for indexing in an external search tool.
@@ -343,6 +344,8 @@ agent-lens dashboard [--port PORT] [--host HOST] [--no-browser]
 agent-lens replay <file.agentlens>  [--port PORT]
 agent-lens export <run_id>          [--output FILE]
 agent-lens export-ctx               [--output FILE] [--format ndjson|codex] [--status STATUS]
+agent-lens search <query>           [--status STATUS] [--limit N]
+agent-lens mcp
 agent-lens version
 ```
 
@@ -370,6 +373,21 @@ Options:
 - `--output` (str) — Output file path, default `agent-lens-corpus.{ctx,codex}.jsonl`
 - `--format` (str) — `ndjson` (provider-neutral, default) or `codex` (ingestible via `ctx import --path`)
 - `--status` (str) — Only export runs with this status
+
+### `agent-lens search <query>`
+Full-text search over stored runs, printing a table of name, status, snippet, and run id.
+
+Options:
+- `--status` (str) — Only search runs with this status
+- `--limit` / `-n` (int) — Maximum number of results, default 50
+
+### `agent-lens mcp`
+Run the MCP (Model Context Protocol) server over stdio, so a coding agent can search agent-lens run history in-loop while developing. Requires the optional extra: `pip install 'agentlens-tracer[mcp]'`.
+
+Tools exposed:
+- `search_runs(query, status?, limit?)` — ranked, outcome-labelled hits over past runs
+- `get_run_context(run_id)` — the provider-neutral why+outcome document for a run
+- `get_lineage(run_id)` — the fork ancestry chain, oldest ancestor first
 
 ### `agent-lens version`
 Print version string.
