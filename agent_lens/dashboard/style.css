@@ -680,6 +680,106 @@ textarea.edit-messages:focus { border-color: #6366f1; }
 
 .search-bar:focus { border-color: #6366f1; }
 
+/* Topbar full-text search */
+.search-box {
+  position: relative;
+  flex: 1;
+  max-width: 280px;
+  min-width: 120px;
+}
+
+.fts-input {
+  width: 100%;
+  background: #0f0f13;
+  border: 1px solid #2a2a38;
+  border-radius: 6px;
+  color: #e2e8f0;
+  font-size: 12px;
+  padding: 5px 10px;
+  outline: none;
+  font-family: monospace;
+}
+
+.fts-input:focus { border-color: #6366f1; }
+
+.search-results {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  max-height: 420px;
+  overflow-y: auto;
+  background: #1a1a24;
+  border: 1px solid #2a2a38;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  z-index: 900;
+  padding: 4px;
+}
+
+.search-result {
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.search-result:hover { background: #1e1e30; }
+
+.search-result-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.search-result-name {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: 'JetBrains Mono', monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-result-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.search-snippet {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #94a3b8;
+  font-family: monospace;
+  word-break: break-word;
+}
+
+.search-empty {
+  padding: 14px 10px;
+  text-align: center;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.assert-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.assert-pass { background: #0f2a0f; color: #22c55e; }
+.assert-fail { background: #2a0f0f; color: #ef4444; }
+.assert-fork { background: #1e1030; color: #a78bfa; }
+
 /* ============================================================
    LIGHT MODE
    ============================================================ */
@@ -706,9 +806,12 @@ textarea.edit-messages:focus { border-color: #6366f1; }
   .modal              { background: #ffffff; border-color: #e2e8f0; }
   .btn                { background: #ffffff; border-color: #e2e8f0; color: #1e293b; }
   .btn:hover          { background: #f8fafc; }
-  .run-select, .search-bar, textarea.edit-messages {
+  .run-select, .search-bar, .fts-input, textarea.edit-messages {
     background: #ffffff; border-color: #e2e8f0; color: #1e293b;
   }
+  .search-results { background: #ffffff; border-color: #e2e8f0; box-shadow: 0 8px 24px rgba(15,23,42,0.12); }
+  .search-result:hover { background: #eff6ff; }
+  .search-snippet { color: #475569; }
   .muted, .run-time, .timeline-label,
   .kv-key, .sidebar-header, .statusbar { color: #64748b; }
 }

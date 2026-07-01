@@ -38,7 +38,11 @@
   let $runList, $runSelect, $tabContent,
       $statusConnDot, $statusConnText, $statusEventCount,
       $btnPause, $btnResume, $btnStep, $btnFork,
-      $searchInput, $modal, $modalMessages;
+      $searchInput, $modal, $modalMessages,
+      $searchBox, $ftsInput, $searchResults;
+
+  let ftsDebounce = null;
+  let ftsRequestSeq = 0;
 
   // ----------------------------------------------------------------
   // API helpers
@@ -627,6 +631,93 @@
   }
 
   // ----------------------------------------------------------------
+  // Full-text search (server-backed) — GET /search
+  // ----------------------------------------------------------------
+
+  function onSearchInput() {
+    if (ftsDebounce) clearTimeout(ftsDebounce);
+    const q = ($ftsInput.value || '').trim();
+    if (!q) {
+      closeSearchResults();
+      return;
+    }
+    ftsDebounce = setTimeout(() => runSearch(q), 200);
+  }
+
+  async function runSearch(q) {
+    const seq = ++ftsRequestSeq;
+    let data;
+    try {
+      const res = await fetch('/search?q=' + encodeURIComponent(q), {
+        headers: { 'X-Agent-Lens-Token': state.csrfToken },
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      data = await res.json();
+    } catch (e) {
+      if (seq !== ftsRequestSeq) return;
+      renderSearchMessage('Search unavailable');
+      return;
+    }
+    // Ignore responses that arrived out of order.
+    if (seq !== ftsRequestSeq) return;
+    renderSearchResults(data.results || []);
+  }
+
+  function renderSearchMessage(msg) {
+    if (!$searchResults) return;
+    $searchResults.innerHTML = `<div class="search-empty">${esc(msg)}</div>`;
+    openSearchResults();
+  }
+
+  function renderSearchResults(results) {
+    if (!$searchResults) return;
+    if (!results.length) {
+      renderSearchMessage('No matches');
+      return;
+    }
+    $searchResults.innerHTML = results.map(r => {
+      const badge = `<span class="badge badge-${esc(r.status)}">${esc(r.status)}</span>`;
+      let assertion = '';
+      if (r.assertion_passed === true) {
+        assertion = '<span class="assert-badge assert-pass" title="Assertion passed">✓ pass</span>';
+      } else if (r.assertion_passed === false) {
+        assertion = '<span class="assert-badge assert-fail" title="Assertion failed">✕ fail</span>';
+      }
+      const fork = r.is_fork ? '<span class="assert-badge assert-fork" title="Forked run">⑂ fork</span>' : '';
+      const snippet = r.snippet ? `<div class="search-snippet">${esc(r.snippet)}</div>` : '';
+      return `<div class="search-result" role="option" tabindex="-1" data-id="${esc(r.run_id)}">
+        <div class="search-result-head">
+          <span class="search-result-name">${esc(r.name)}</span>
+          <span class="search-result-tags">${assertion}${fork}${badge}</span>
+        </div>
+        ${snippet}
+      </div>`;
+    }).join('');
+
+    $searchResults.querySelectorAll('.search-result').forEach(el => {
+      el.addEventListener('click', () => {
+        selectRun(el.dataset.id);
+        closeSearchResults();
+        if ($ftsInput) $ftsInput.blur();
+      });
+    });
+    openSearchResults();
+  }
+
+  function openSearchResults() {
+    if (!$searchResults) return;
+    $searchResults.style.display = 'block';
+    if ($ftsInput) $ftsInput.setAttribute('aria-expanded', 'true');
+  }
+
+  function closeSearchResults() {
+    if (!$searchResults) return;
+    $searchResults.style.display = 'none';
+    $searchResults.innerHTML = '';
+    if ($ftsInput) $ftsInput.setAttribute('aria-expanded', 'false');
+  }
+
+  // ----------------------------------------------------------------
   // View switching
   // ----------------------------------------------------------------
 
@@ -662,7 +753,11 @@
       switch (e.key) {
         case '/':
           e.preventDefault();
-          $searchInput && $searchInput.focus();
+          if ($ftsInput && $searchBox && $searchBox.style.display !== 'none') {
+            $ftsInput.focus();
+          } else if ($searchInput) {
+            $searchInput.focus();
+          }
           break;
         case ' ':
           e.preventDefault();
@@ -688,6 +783,7 @@
         case '3': setView('inspector'); break;
         case 'Escape':
           hideForkModal();
+          closeSearchResults();
           break;
       }
     });
@@ -737,6 +833,24 @@
     $btnStep = document.getElementById('btn-step');
     $btnFork = document.getElementById('btn-fork');
     $searchInput = document.getElementById('search-input');
+    $searchBox = document.getElementById('search-box');
+    $ftsInput = document.getElementById('fts-input');
+    $searchResults = document.getElementById('search-results');
+
+    // Full-text search: hidden/inert in export mode (no live server).
+    if (state.isExport) {
+      if ($searchBox) $searchBox.style.display = 'none';
+    } else if ($ftsInput) {
+      $ftsInput.addEventListener('input', onSearchInput);
+      $ftsInput.addEventListener('focus', () => {
+        if (($ftsInput.value || '').trim() && $searchResults && $searchResults.innerHTML) {
+          openSearchResults();
+        }
+      });
+      document.addEventListener('click', (e) => {
+        if ($searchBox && !$searchBox.contains(e.target)) closeSearchResults();
+      });
+    }
 
     // Tab click handlers
     document.querySelectorAll('.tab').forEach(t => {

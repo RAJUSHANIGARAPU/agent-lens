@@ -277,14 +277,26 @@ window.__AGENT_LENS_DATA__ = JSON.parse(document.getElementById('al-data').textC
         )
 
     @app.get("/search")
-    async def search(q: str = "", status: str | None = None, limit: int = 50, offset: int = 0):
+    async def search(
+        q: str = "",
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+        include_lineage: bool = False,
+    ):
         """Full-text search over run records (name, notes, assertion, messages,
-        responses, chain-of-thought). Returns ranked hits with match snippets."""
+        responses, chain-of-thought). Returns ranked hits with match snippets.
+
+        When include_lineage=true, each result also carries a `lineage` list:
+        the run's fork ancestry chain, oldest first.
+        """
         query = (q or "").strip()
         if not query:
             raise HTTPException(status_code=400, detail="query parameter 'q' is required")
 
-        hits = effective_store.search_runs(query, status=status, limit=limit, offset=offset)
+        hits = effective_store.search_runs(
+            query, status=status, limit=limit, offset=offset, include_lineage=include_lineage
+        )
         results = []
         for hit in hits:
             entry = {
@@ -294,6 +306,8 @@ window.__AGENT_LENS_DATA__ = JSON.parse(document.getElementById('al-data').textC
                 "score": hit["score"],
                 "snippet": hit["snippet"],
             }
+            if include_lineage:
+                entry["lineage"] = hit.get("lineage", [])
             run = effective_store.get_run(hit["run_id"])
             if run is not None:
                 entry["notes"] = run.notes
