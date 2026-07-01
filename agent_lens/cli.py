@@ -191,6 +191,36 @@ window.__AGENT_LENS_DATA__ = JSON.parse(document.getElementById('al-data').textC
     typer.echo(f"Exported to {out_path}")
 
 
+@app.command(name="export-ctx")
+def export_ctx(
+    output: str | None = typer.Option(None, "--output", "-o", help="Output file path"),
+    export_format: str = typer.Option(
+        "ndjson", "--format", "-f", help="Export format: 'ndjson' (provider-neutral) or 'codex'"
+    ),
+    status: str | None = typer.Option(None, "--status", help="Only export runs with this status"),
+) -> None:
+    """Export runs as NDJSON for indexing in an external search tool (e.g. ctx)."""
+    fmt = export_format.lower()
+    if fmt not in ("ndjson", "codex"):
+        typer.echo("Error: --format must be 'ndjson' or 'codex'.", err=True)
+        raise typer.Exit(1)
+
+    from agent_lens.export import ctx_lines, iter_runs
+    from agent_lens.store import get_default_store
+
+    store = get_default_store()
+    out_path = output or f"agent-lens-corpus.{'codex' if fmt == 'codex' else 'ctx'}.jsonl"
+
+    count = 0
+    with Path(out_path).open("w", encoding="utf-8") as fh:
+        for run in iter_runs(store, status, None):
+            for line in ctx_lines(store, run, fmt):
+                fh.write(line)
+            count += 1
+
+    typer.echo(f"Exported {count} run(s) to {out_path}")
+
+
 @app.command()
 def version() -> None:
     """Print the agent-lens version."""
