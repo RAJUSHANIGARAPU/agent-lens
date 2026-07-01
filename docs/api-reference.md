@@ -206,6 +206,64 @@ Export run as self-contained HTML.
 
 Response: `text/html`
 
+### `GET /search`
+Full-text search over run records — name, notes, expected-output assertion, prompt messages, response text, and chain-of-thought. Backed by SQLite FTS5 (bm25 ranking), with a substring fallback when FTS5 is unavailable.
+
+Query parameters:
+- `q` (str, required) — search terms; multiple terms are ANDed
+- `status` (str) — restrict to runs with this status
+- `limit` (int, default 50), `offset` (int, default 0)
+
+Response:
+```json
+{
+  "query": "retry backoff",
+  "count": 1,
+  "results": [
+    {
+      "run_id": "...", "name": "...", "status": "completed",
+      "score": -1.87, "snippet": "…exponential [backoff]…",
+      "notes": "...", "expected_output": "concise",
+      "is_fork": true, "assertion_passed": true
+    }
+  ]
+}
+```
+`assertion_passed` is present only when the run has an `expected_output`. Returns `400` if `q` is empty.
+
+### `GET /runs/{run_id}/export/ctx`
+Export a single run for indexing in an external search tool.
+
+Query parameters:
+- `format` (str, default `ndjson`) — `ndjson` (provider-neutral document with structured outcome labels) or `codex` (Codex-format session records ingestible by `ctx import --path`)
+
+Response: `application/x-ndjson`. `ndjson` emits one document; `codex` emits one line per session record. Returns `400` for an unknown format, `404` if the run is missing.
+
+The `ndjson` document:
+```json
+{
+  "id": "<run_id>", "source": "agent-lens", "title": "<name>",
+  "text": "<flattened messages, response, thinking, notes>",
+  "metadata": {
+    "run_id": "...", "status": "completed", "parent_run_id": null,
+    "is_fork": false, "notes": "...", "expected_output": "concise",
+    "assertion_passed": true, "started_at": "2026-07-01T10:00:00Z",
+    "ended_at": "...", "start_time": 1751362800.0, "duration_ms": 4210,
+    "total_tokens": 1234, "cost_usd": 0.021, "num_events": 12, "url": "/runs/..."
+  }
+}
+```
+
+### `GET /export/ctx`
+Stream the whole run corpus as NDJSON (one line per run), for bulk indexing.
+
+Query parameters:
+- `format` (str, default `ndjson`) — `ndjson` or `codex`
+- `status` (str) — restrict to runs with this status
+- `limit` (int) — cap the number of runs exported
+
+Response: `application/x-ndjson` (streamed).
+
 ### `POST /runs/{run_id}/pause`
 Pause a run.
 
@@ -244,6 +302,26 @@ Body:
 
 Response: `{"status": "injected", "run_id": "..."}`
 
+### `POST /runs/{run_id}/note`
+Add or update a developer note on any run (not just forks).
+
+Body:
+```json
+{"notes": "why this run matters"}
+```
+
+Response: `{"status": "ok", "run_id": "..."}`
+
+### `GET /runs/{run_id}/lineage`
+Return the full fork ancestry chain for a run, oldest first.
+
+Response: `{"run_id": "...", "lineage": [{...run summary, "notes": "...", "depth": 0}, ...], "depth": N}`
+
+### `GET /runs/{run_id}/diff/{other_run_id}`
+Compare two runs structurally: message diff, response diff, metrics delta, and — when either run has an `expected_output` — an assertion result with a comparative verdict (`improved` / `regressed` / `both_pass` / `neither_pass`).
+
+Response: `{"messages_diff": [...], "response_diff": {...}, "metrics_delta": {...}, "thinking_blocks": {...}, "assertion_result": {...}}`
+
 ### `GET /events/stream`
 Server-Sent Events stream. Emits all events in real time.
 
@@ -264,6 +342,7 @@ Response: `{"version": "0.1.0", "host": "127.0.0.1"}`
 agent-lens dashboard [--port PORT] [--host HOST] [--no-browser]
 agent-lens replay <file.agentlens>  [--port PORT]
 agent-lens export <run_id>          [--output FILE]
+agent-lens export-ctx               [--output FILE] [--format ndjson|codex] [--status STATUS]
 agent-lens version
 ```
 
@@ -283,6 +362,14 @@ Export a run as a self-contained HTML file.
 
 Options:
 - `--output` (str) — Output file path, default `run-<id>.html`
+
+### `agent-lens export-ctx`
+Export all runs as NDJSON for indexing in an external search tool (e.g. `ctx`).
+
+Options:
+- `--output` (str) — Output file path, default `agent-lens-corpus.{ctx,codex}.jsonl`
+- `--format` (str) — `ndjson` (provider-neutral, default) or `codex` (ingestible via `ctx import --path`)
+- `--status` (str) — Only export runs with this status
 
 ### `agent-lens version`
 Print version string.

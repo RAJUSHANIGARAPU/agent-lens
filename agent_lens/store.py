@@ -14,6 +14,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from agent_lens._textutil import flatten_run_text
 from agent_lens.models import Event, EventType, Run, RunStatus, Span
 
 DEFAULT_DB_PATH = Path.home() / ".agent-lens" / "runs.db"
@@ -71,6 +72,24 @@ CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_events_type      ON events(type);
 """
 
+# Full-text index over run records. Kept in a separate statement because FTS5
+# is not compiled into every SQLite build; a missing module must degrade the
+# store to a LIKE-based fallback rather than crash initialization.
+_FTS_SCHEMA = """
+CREATE VIRTUAL TABLE IF NOT EXISTS run_search USING fts5(
+    run_id UNINDEXED,
+    name,
+    notes,
+    expected_output,
+    body,
+    tokenize='unicode61'
+);
+"""
+
+# Terminal run states worth indexing — a still-running run has an incomplete
+# body, so it is (re)indexed once it reaches one of these.
+_TERMINAL_STATUSES = {"completed", "error", "forked"}
+
 
 class Store:
     """
@@ -91,6 +110,7 @@ class Store:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._write_lock = threading.Lock()
         self._local = threading.local()
+        self._fts_enabled = False
         self._init_schema()
 
     def _get_conn(self) -> sqlite3.Connection:
@@ -113,7 +133,17 @@ class Store:
                 conn.execute("ALTER TABLE runs ADD COLUMN notes TEXT")
             if "expected_output" not in cols:
                 conn.execute("ALTER TABLE runs ADD COLUMN expected_output TEXT")
+            self._fts_enabled = self._try_init_fts(conn)
             conn.commit()
+
+    def _try_init_fts(self, conn: sqlite3.Connection) -> bool:
+        """Create the FTS5 search table, returning False if FTS5 is unavailable."""
+        try:
+            conn.executescript(_FTS_SCHEMA)
+            return True
+        except sqlite3.OperationalError:
+            # SQLite build without the FTS5 module — search falls back to LIKE.
+            return False
 
     # ------------------------------------------------------------------
     # Runs
@@ -176,6 +206,10 @@ class Store:
                     (status.value if hasattr(status, "value") else status, run_id),
                 )
             conn.commit()
+
+        status_value = status.value if hasattr(status, "value") else status
+        if status_value in _TERMINAL_STATUSES:
+            self.reindex_run(run_id)
 
     # ------------------------------------------------------------------
     # Spans
@@ -286,6 +320,125 @@ class Store:
         return row["cnt"] if row else 0
 
     # ------------------------------------------------------------------
+    # Search
+    # ------------------------------------------------------------------
+
+    def reindex_run(self, run_id: str) -> None:
+        """Refresh the search-index entry for a single run. No-op without FTS5."""
+        if not self._fts_enabled:
+            return
+        run = self.get_run(run_id)
+        if run is None:
+            return
+        body = flatten_run_text(run, self.get_events(run_id))
+        with self._write_lock:
+            conn = self._get_conn()
+            conn.execute("DELETE FROM run_search WHERE run_id = ?", (run_id,))
+            conn.execute(
+                "INSERT INTO run_search (run_id, name, notes, expected_output, body) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (run_id, run.name or "", run.notes or "", run.expected_output or "", body),
+            )
+            conn.commit()
+
+    def reindex_all(self) -> None:
+        """Rebuild the entire search index from the runs table. No-op without FTS5."""
+        if not self._fts_enabled:
+            return
+        with self._write_lock:
+            conn = self._get_conn()
+            conn.execute("DELETE FROM run_search")
+            conn.commit()
+        for run in self.get_runs(limit=1_000_000):
+            self.reindex_run(run.id)
+
+    def search_runs(
+        self,
+        query: str,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """Full-text search over run records.
+
+        Returns ranked hits as dicts with run_id, name, status, score (bm25;
+        None in fallback mode) and a highlighted snippet. Uses SQLite FTS5 when
+        available and degrades to a substring scan otherwise.
+        """
+        query = (query or "").strip()
+        if not query:
+            return []
+        if self._fts_enabled:
+            return self._search_fts(query, status, limit, offset)
+        return self._search_like(query, status, limit, offset)
+
+    def _search_fts(
+        self, query: str, status: str | None, limit: int, offset: int
+    ) -> list[dict[str, Any]]:
+        conn = self._get_conn()
+        # Build the index lazily the first time it is queried so runs that were
+        # persisted directly (e.g. imports, tests) become searchable on demand.
+        indexed = conn.execute("SELECT COUNT(*) AS c FROM run_search").fetchone()["c"]
+        total_runs = conn.execute("SELECT COUNT(*) AS c FROM runs").fetchone()["c"]
+        if indexed == 0 and total_runs > 0:
+            self.reindex_all()
+
+        params: list[Any] = [_to_match_query(query)]
+        sql = (
+            "SELECT s.run_id AS run_id, r.name AS name, r.status AS status, "
+            "bm25(run_search) AS score, "
+            "snippet(run_search, 4, '[', ']', ' … ', 12) AS snippet "
+            "FROM run_search s JOIN runs r ON r.id = s.run_id "
+            "WHERE run_search MATCH ?"
+        )
+        if status:
+            sql += " AND r.status = ?"
+            params.append(status)
+        sql += " ORDER BY score LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+
+        rows = conn.execute(sql, params).fetchall()
+        return [
+            {
+                "run_id": row["run_id"],
+                "name": row["name"],
+                "status": row["status"],
+                "score": row["score"],
+                "snippet": row["snippet"],
+            }
+            for row in rows
+        ]
+
+    def _search_like(
+        self, query: str, status: str | None, limit: int, offset: int
+    ) -> list[dict[str, Any]]:
+        needle = query.lower()
+        matched: list[dict[str, Any]] = []
+        page = 500
+        run_offset = 0
+        while True:
+            runs = self.get_runs(limit=page, offset=run_offset)
+            if not runs:
+                break
+            for run in runs:
+                run_status = getattr(run.status, "value", run.status)
+                if status and run_status != status:
+                    continue
+                body = flatten_run_text(run, self.get_events(run.id))
+                if needle in body.lower():
+                    matched.append(
+                        {
+                            "run_id": run.id,
+                            "name": run.name,
+                            "status": run_status,
+                            "score": None,
+                            "snippet": _make_snippet(body, needle),
+                        }
+                    )
+            run_offset += page
+        return matched[offset : offset + limit]
+
+    # ------------------------------------------------------------------
     # Serialization helpers
     # ------------------------------------------------------------------
 
@@ -335,6 +488,30 @@ class Store:
         if hasattr(self._local, "conn") and self._local.conn:
             self._local.conn.close()
             self._local.conn = None
+
+
+def _to_match_query(query: str) -> str:
+    """Turn free-form user input into a safe FTS5 MATCH expression.
+
+    Each whitespace-separated token is quoted as a phrase so characters that
+    are otherwise FTS5 operators (``:``, ``-``, ``*``, ``"``) can't produce a
+    syntax error. Multiple tokens are ANDed together.
+    """
+    tokens = query.split()
+    safe = [f'"{tok.replace(chr(34), chr(34) * 2)}"' for tok in tokens]
+    return " ".join(safe) if safe else '""'
+
+
+def _make_snippet(body: str, needle: str, width: int = 60) -> str:
+    """Return a short window of ``body`` around the first match of ``needle``."""
+    idx = body.lower().find(needle)
+    if idx < 0:
+        return body[:width]
+    start = max(0, idx - width // 2)
+    end = min(len(body), idx + len(needle) + width // 2)
+    prefix = "… " if start > 0 else ""
+    suffix = " …" if end < len(body) else ""
+    return f"{prefix}{body[start:end]}{suffix}"
 
 
 # Module-level singleton store (lazy-initialized)
