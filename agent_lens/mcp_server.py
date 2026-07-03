@@ -4,13 +4,15 @@ agent_lens.mcp_server
 Model Context Protocol server exposing agent-lens run history so a coding
 agent can search it in-loop while developing.
 
-Three tools, each a thin wrapper over the reusable store/export APIs:
+Four tools, each a thin wrapper over the reusable store/export/compare APIs:
 
 * ``search_runs`` — full-text search over run records, hits enriched with the
   developer notes, expected_output assertion and its pass/fail result.
 * ``get_run_context`` — the rich provider-neutral document for a run (the
   flattened searchable text plus structured outcome labels).
 * ``get_lineage`` — the fork ancestry chain for a run, oldest ancestor first.
+* ``compare_runs`` — structural diff of two runs plus the improved/regressed
+  verdict, so an agent can tell whether a forked hypothesis held.
 
 The tool functions are plain module-level callables (``search_runs_tool`` etc.)
 so they can be imported and unit-tested without a live MCP transport. The
@@ -22,6 +24,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from agent_lens.compare import compare_runs as run_comparison
 from agent_lens.export import assertion_passed, ctx_document
 from agent_lens.store import Store, get_default_store
 
@@ -118,6 +121,19 @@ def get_lineage_tool(run_id: str, store: Store | None = None) -> dict[str, Any]:
     return {"run_id": run_id, "lineage": chain, "depth": len(chain)}
 
 
+def compare_runs_tool(
+    run_a_id: str, run_b_id: str, store: Store | None = None
+) -> dict[str, Any]:
+    """Compare two runs: message/response diff, metrics delta, and a verdict.
+
+    Use this to check whether a forked hypothesis actually improved on its
+    parent — the ``assertion_result.verdict`` is one of ``improved``,
+    ``regressed``, ``both_pass`` or ``neither_pass`` (present only when a run has
+    an ``expected_output``). Raises ``ValueError`` if either run is missing.
+    """
+    return run_comparison(_store(store), run_a_id, run_b_id)
+
+
 def build_server():  # pragma: no cover - exercised only via the live transport
     """Construct the FastMCP server with the three tools registered.
 
@@ -142,6 +158,11 @@ def build_server():  # pragma: no cover - exercised only via the live transport
     def get_lineage(run_id: str) -> dict:
         """Return the fork ancestry chain for a run, oldest ancestor first."""
         return get_lineage_tool(run_id)
+
+    @mcp.tool()
+    def compare_runs(run_a_id: str, run_b_id: str) -> dict:
+        """Compare two runs: diff, metrics delta, and improved/regressed verdict."""
+        return compare_runs_tool(run_a_id, run_b_id)
 
     return mcp
 
