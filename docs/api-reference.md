@@ -388,6 +388,7 @@ Tools exposed:
 - `search_runs(query, status?, limit?)` — ranked, outcome-labelled hits over past runs
 - `get_run_context(run_id)` — the provider-neutral why+outcome document for a run
 - `get_lineage(run_id)` — the fork ancestry chain, oldest ancestor first
+- `compare_runs(run_a_id, run_b_id)` — structural diff, metrics delta, and improved/regressed verdict
 
 ### `agent-lens version`
 Print version string.
