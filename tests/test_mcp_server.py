@@ -11,6 +11,7 @@ import uuid
 import pytest
 
 from agent_lens.mcp_server import (
+    compare_runs_tool,
     get_lineage_tool,
     get_run_context_tool,
     search_runs_tool,
@@ -90,3 +91,19 @@ class TestGetLineageTool:
     def test_missing_run_raises(self, store):
         with pytest.raises(ValueError):
             get_lineage_tool("no-such-run", store=store)
+
+
+class TestCompareRunsTool:
+    def test_verdict_improved(self, store):
+        parent = _seed(store, name="parent", message="verbose please",
+                       response="a long verbose answer")
+        fork = _seed(store, name="fork", message="be brief", response="concise answer",
+                     expected_output="concise")
+        result = compare_runs_tool(parent.id, fork.id, store=store)
+        assert result["assertion_result"]["verdict"] == "improved"
+        assert result["response_diff"]["changed"] is True
+
+    def test_missing_run_raises(self, store):
+        run = _seed(store, name="only", message="x", response="y")
+        with pytest.raises(ValueError):
+            compare_runs_tool(run.id, "no-such-run", store=store)
