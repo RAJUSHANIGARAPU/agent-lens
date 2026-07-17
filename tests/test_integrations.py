@@ -488,3 +488,225 @@ def test_llamaindex_query_event_capture(monkeypatch):
     types_ = _types(_events_for_run(run.id))
     assert EventType.AGENT_START in types_
     assert EventType.AGENT_END in types_
+
+
+# ==================================================================
+# Deeper coverage: pure helpers, async paths, error/guard branches,
+# graceful no-ops, and unpatch().
+# ==================================================================
+
+# ---- openai pure helpers -----------------------------------------
+
+def test_openai_estimate_cost_known_and_unknown_model():
+    from agent_lens.integrations import openai as oai
+
+    assert oai._estimate_cost("gpt-4o", 1000, 1000) > 0
+    assert oai._estimate_cost("gpt-4o-2024-11-20", 1000, 1000) > 0  # substring match
+    assert oai._estimate_cost("some-unlisted-model", 1000, 1000) == 0.0
+
+
+def test_openai_extract_messages_variants():
+    from agent_lens.integrations import openai as oai
+
+    class _Model:
+        def model_dump(self):
+            return {"role": "assistant", "content": "ok"}
+
+    class _BadModel:
+        def model_dump(self):
+            raise ValueError("nope")
+
+    class _NoDump:
+        pass
+
+    out = oai._extract_messages(
+        [{"role": "user", "content": f"k {OPENAI_KEY}", "function_call": {"x": 1}}]
+    )
+    assert out[0]["role"] == "user"
+    assert "function_call" not in out[0]  # stripped
+    assert OPENAI_KEY not in json.dumps(out, default=str)  # redacted
+
+    assert oai._extract_messages([_Model()])[0]["content"] == "ok"
+    assert oai._extract_messages([_BadModel()])[0]["role"] == "unknown"  # except branch
+    assert oai._extract_messages([_NoDump()])[0]["role"] == "unknown"    # dict() fails -> except
+    assert oai._extract_messages(None) == []
+    assert oai._extract_messages("not-a-list") == []
+
+
+def test_openai_safe_response_dict_variants():
+    from agent_lens.integrations import openai as oai
+
+    class _WithDump:
+        def model_dump(self):
+            return {"tok": f"leak {OPENAI_KEY}"}
+
+    class _WithDict:
+        def __init__(self):
+            self.public = 1
+            self._private = 2
+
+    d = oai._safe_response_dict(_WithDump())
+    assert OPENAI_KEY not in json.dumps(d, default=str)  # redacted
+
+    d2 = oai._safe_response_dict(_WithDict())
+    assert d2.get("public") == 1
+    assert "_private" not in d2  # underscored keys dropped
+
+    assert oai._safe_response_dict(object()) == {}  # no dump / no __dict__ -> {}
+
+
+# ---- anthropic pure helpers --------------------------------------
+
+def test_anthropic_estimate_cost_known_and_unknown():
+    from agent_lens.integrations import anthropic as ant
+
+    assert ant._estimate_cost("claude-3-opus-20240229", 1_000_000, 0) > 0
+    assert ant._estimate_cost("mystery-model", 100, 100) == 0.0
+
+
+def test_anthropic_helpers_extract_and_thinking():
+    from agent_lens.integrations import anthropic as ant
+
+    class _Think:
+        type = "thinking"
+        thinking = "internal"
+
+    class _Text:
+        type = "text"
+
+    class _Resp:
+        content = [_Think(), _Text()]
+
+    assert ant._extract_thinking_blocks(_Resp()) == ["internal"]
+    assert ant._extract_thinking_blocks(object()) == []  # no content -> []
+
+    out = ant._extract_messages([{"role": "user", "content": f"k {ANTHROPIC_KEY}"}])
+    assert ANTHROPIC_KEY not in json.dumps(out, default=str)
+    assert ant._extract_messages("not-a-list") == []
+
+
+# ---- anthropic async capture -------------------------------------
+
+class _AntMessagesAsync(_AntMessages):
+    async def acreate(self, *args, **kwargs):
+        return _AntResp()
+
+
+async def test_anthropic_async_capture(anthropic_patched):
+    Messages = anthropic_patched(_AntMessagesAsync)
+    run = Tracer.get_instance().start_run("t")
+
+    resp = await Messages().acreate(
+        model="claude-3-haiku-20240307",
+        messages=[{"role": "user", "content": "hi"}],
+    )
+    assert isinstance(resp, _AntResp)
+    end = next(e for e in _events_for_run(run.id) if e.type == EventType.LLM_END and "provider" in e.data)
+    assert end.data["input_tokens"] == 100
+
+
+# ---- openai async injection + error ------------------------------
+
+class _OABoomAsync(_OACompletions):
+    async def acreate(self, *args, **kwargs):
+        raise ValueError("async upstream 500")
+
+
+async def test_openai_async_injection_bypasses_call(openai_patched):
+    Completions = openai_patched(_OACompletions)
+    run = Tracer.get_instance().start_run("t")
+
+    sentinel = {"injected": True}
+    ControlPlane.get_instance().inject(run.id, sentinel)
+
+    resp = await Completions().acreate(model="gpt-4o", messages=[])
+    assert resp is sentinel
+    assert EventType.LLM_START not in _types(_events_for_run(run.id))
+
+
+async def test_openai_async_error_path(openai_patched):
+    Completions = openai_patched(_OABoomAsync)
+    run = Tracer.get_instance().start_run("t")
+
+    with pytest.raises(ValueError, match="async upstream 500"):
+        await Completions().acreate(model="gpt-4o", messages=[])
+
+    types_ = _types(_events_for_run(run.id))
+    assert EventType.LLM_START in types_
+    assert EventType.ERROR in types_
+
+
+# ---- unpatch() ---------------------------------------------------
+
+def test_openai_unpatch_resets_flag(openai_patched):
+    openai_patched(_OACompletions)
+    from agent_lens.integrations import openai as oai
+
+    assert oai._patched is True
+    oai.unpatch()
+    assert oai._patched is False
+
+
+def test_anthropic_unpatch_resets_flag(anthropic_patched):
+    anthropic_patched(_AntMessages)
+    from agent_lens.integrations import anthropic as ant
+
+    assert ant._patched is True
+    ant.unpatch()
+    assert ant._patched is False
+
+
+# ---- langchain error paths + span guard --------------------------
+
+def test_langchain_tool_and_chain_error_record_error(monkeypatch):
+    import uuid
+
+    from agent_lens.integrations import langchain as lc
+
+    monkeypatch.setattr(lc, "_LANGCHAIN_AVAILABLE", True)
+    handler = lc.AgentLensCallbackHandler()
+    run = Tracer.get_instance().start_run("t")
+
+    tool_id = uuid.uuid4()
+    handler.on_tool_start({"name": "search"}, "q", run_id=tool_id)
+    handler.on_tool_error(ValueError("tool boom"), run_id=tool_id)
+
+    chain_id = uuid.uuid4()
+    handler.on_chain_start({"name": "qa"}, {"q": "x"}, run_id=chain_id)
+    handler.on_chain_error(RuntimeError("chain boom"), run_id=chain_id)
+
+    errors = [e for e in _events_for_run(run.id) if e.type == EventType.ERROR]
+    kinds = {e.data.get("type") for e in errors}
+    assert "ValueError" in kinds
+    assert "RuntimeError" in kinds
+
+
+def test_langchain_unknown_span_is_ignored(monkeypatch):
+    import uuid
+
+    from agent_lens.integrations import langchain as lc
+
+    monkeypatch.setattr(lc, "_LANGCHAIN_AVAILABLE", True)
+    handler = lc.AgentLensCallbackHandler()
+    run = Tracer.get_instance().start_run("t")
+
+    # on_llm_end for a run_id that never started must be a safe no-op.
+    handler.on_llm_end(_LCResponse(), run_id=uuid.uuid4())
+    assert EventType.LLM_END not in _types(_events_for_run(run.id))
+
+
+# ---- llamaindex graceful no-op + trace hooks ---------------------
+
+def test_llamaindex_noop_when_unavailable():
+    from agent_lens.integrations import llamaindex as li
+
+    # _LLAMAINDEX_AVAILABLE is False by default (llama-index not installed).
+    handler = li.AgentLensLlamaIndexHandler()
+    run = Tracer.get_instance().start_run("t")
+
+    assert handler.on_event_start("llm", payload={}, event_id="e1") == "e1"
+    handler.on_event_end("llm", payload={}, event_id="e1")
+    handler.start_trace("trace-1")
+    handler.end_trace("trace-1", {})
+
+    assert _events_for_run(run.id) == []
