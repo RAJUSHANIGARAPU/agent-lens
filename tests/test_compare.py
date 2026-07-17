@@ -76,3 +76,16 @@ def test_compare_missing_run_b_raises(store):
     run_a = _seed_llm(store, name="a", message="x", response="y")
     with pytest.raises(ValueError):
         compare_runs(store, run_a.id, "also-nope")
+
+
+def test_first_data_returns_empty_when_type_absent():
+    from agent_lens.compare import _first_data
+
+    assert _first_data([], "llm_start") == {}
+
+
+def test_delta_handles_none_operands():
+    from agent_lens.compare import _delta
+
+    assert _delta(None, 5.0) == {"a": None, "b": 5.0, "delta": None, "pct_change": None}
+    assert _delta(3.0, None) == {"a": 3.0, "b": None, "delta": None, "pct_change": None}
