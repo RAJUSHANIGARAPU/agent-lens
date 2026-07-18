@@ -10,9 +10,11 @@ per-test default store seeded directly.
 """
 
 import json
+import sys
 import time
 import uuid
 
+import pytest
 from typer.testing import CliRunner
 
 from agent_lens.cli import app
@@ -84,6 +86,7 @@ def test_replay_file_not_found():
     assert "File not found" in _combined(result)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="forbidden-prefix guard is Unix-only (cli.py skips it on win32)")
 def test_replay_rejects_forbidden_prefix():
     # /dev is a real (non-symlink) directory on both Linux and macOS, so
     # Path.resolve() keeps it under a forbidden prefix on either platform.
@@ -117,6 +120,10 @@ def test_replay_rejects_bad_json(tmp_path):
     assert "Error reading file" in _combined(result)
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="replay unlinks its still-open temp SQLite file, which raises PermissionError on Windows",
+)
 def test_replay_loads_and_starts(tmp_path, monkeypatch):
     from agent_lens import dashboard_launcher
 
