@@ -724,10 +724,15 @@ def test_langchain_unknown_span_is_ignored(monkeypatch):
 
 # ---- llamaindex graceful no-op + trace hooks ---------------------
 
-def test_llamaindex_noop_when_unavailable():
+def test_llamaindex_noop_when_unavailable(monkeypatch):
     from agent_lens.integrations import llamaindex as li
 
-    # _LLAMAINDEX_AVAILABLE is False by default (llama-index not installed).
+    # Force the unavailable path rather than inferring it from the environment:
+    # this test used to rely on llama-index simply not being installed, so it
+    # inverted and failed in any job that does install it. The hooks read the
+    # flag at call time, so flipping it is enough.
+    monkeypatch.setattr(li, "_LLAMAINDEX_AVAILABLE", False)
+
     handler = li.AgentLensLlamaIndexHandler()
     run = Tracer.get_instance().start_run("t")
 
