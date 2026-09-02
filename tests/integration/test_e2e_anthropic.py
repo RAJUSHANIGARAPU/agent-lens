@@ -10,6 +10,7 @@ Verifies:
 """
 
 import json
+import os
 
 import pytest
 
@@ -31,9 +32,17 @@ except ImportError:
     ANTHROPIC_AVAILABLE = False
 
 
+# Same hazard as the OpenAI e2e suite: respx does not intercept anthropic 1.3.0
+# on httpx 0.28.1, so these reach api.anthropic.com and answer 401 for the fake
+# key. See the note in test_e2e_openai.py.
+RUN_LIVE_E2E = os.environ.get("AGENT_LENS_LIVE_E2E") == "1"
+
 pytestmark = pytest.mark.skipif(
-    not (RESPX_AVAILABLE and ANTHROPIC_AVAILABLE),
-    reason="respx and anthropic are required for this test",
+    not (RESPX_AVAILABLE and ANTHROPIC_AVAILABLE and RUN_LIVE_E2E),
+    reason=(
+        "makes REAL calls to api.anthropic.com — respx does not intercept "
+        "anthropic/httpx>=0.28. Set AGENT_LENS_LIVE_E2E=1 to opt in."
+    ),
 )
 
 MOCK_ANTHROPIC_RESPONSE = {
