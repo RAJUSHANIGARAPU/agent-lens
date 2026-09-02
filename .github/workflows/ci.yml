@@ -71,7 +71,13 @@ jobs:
       - name: Install dependencies with vendor SDKs
         run: pip install -e ".[dev,sdks]"
 
+      # This job exists to check the integrations against the real SDKs, so a
+      # skipped surface check means the check did not happen. Promote it to a
+      # failure: a skip is the absence of a signal, and from outside it is
+      # indistinguishable from a pass.
       - name: Run integration tests against the real SDKs
+        env:
+          AGENT_LENS_REQUIRE_SDKS: "1"
         run: pytest tests/integrations/ -v
 
   security:
