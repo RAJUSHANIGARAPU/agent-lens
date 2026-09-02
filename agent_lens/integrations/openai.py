@@ -1,10 +1,17 @@
 """
 agent_lens.integrations.openai
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Monkey-patches openai.resources.chat.completions.Completions.create and .acreate
-to automatically capture LLM calls as agent-lens spans.
+Monkey-patches the OpenAI SDK's chat-completions entry points to automatically
+capture LLM calls as agent-lens spans.
 
-Graceful: if openai is not installed, the patch is a no-op.
+Two call sites are patched, when the installed SDK exposes them:
+
+- ``Completions.create``      — the synchronous client
+- ``AsyncCompletions.create`` — the asynchronous client
+
+Graceful: if openai is not installed, the patch is a no-op. A call site the
+installed SDK does not expose is skipped rather than raising, so a future SDK
+reshuffle degrades to reduced capture instead of an import-time crash.
 """
 
 from __future__ import annotations
@@ -13,8 +20,16 @@ import threading
 import time
 from typing import Any
 
+from agent_lens.integrations import _pricing
+
 _patched = False
 _patch_lock = threading.Lock()
+
+# Original callables we replaced, keyed by (owner class, attribute name), so
+# unpatch() can genuinely restore them. Without this, unpatch() only clears the
+# flag and the next patch() wraps the already-wrapped function, duplicating
+# every span and event.
+_originals: dict[tuple[type, str], Any] = {}
 
 
 # OpenAI pricing (USD per 1K tokens) — approximate, update periodically
@@ -29,16 +44,8 @@ _OPENAI_PRICING: dict[str, dict[str, float]] = {
 
 def _estimate_cost(model: str, prompt_tokens: int, completion_tokens: int) -> float:
     """Estimate USD cost for an OpenAI call."""
-    pricing = None
-    for key in _OPENAI_PRICING:
-        if key in model:
-            pricing = _OPENAI_PRICING[key]
-            break
-    if pricing is None:
-        return 0.0
-    return (
-        prompt_tokens * pricing["input"] / 1000
-        + completion_tokens * pricing["output"] / 1000
+    return _pricing.estimate_cost(
+        _OPENAI_PRICING, model, prompt_tokens, completion_tokens, per_tokens=1_000
     )
 
 
@@ -77,9 +84,38 @@ def _safe_response_dict(response: Any) -> dict:
     return {}
 
 
+def _start_data(model: str, messages: Any, kwargs: dict) -> dict:
+    """Build the LLM_START payload."""
+    return {
+        "provider": "openai",
+        "model": model,
+        "messages": _extract_messages(messages),
+        "kwargs": {k: v for k, v in kwargs.items() if k not in ("messages", "api_key")},
+    }
+
+
+def _end_data(model: str, response: Any, latency_ms: float) -> dict:
+    """Build the LLM_END payload."""
+    usage = getattr(response, "usage", None)
+    prompt_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
+    completion_tokens = getattr(usage, "completion_tokens", 0) if usage else 0
+
+    return {
+        "provider": "openai",
+        "model": model,
+        "latency_ms": latency_ms,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": prompt_tokens + completion_tokens,
+        "cost_usd": _estimate_cost(model, prompt_tokens, completion_tokens),
+        "response": _safe_response_dict(response),
+    }
+
+
 def patch() -> bool:
     """
-    Monkey-patch openai's Completions.create and acreate.
+    Monkey-patch the OpenAI SDK's chat-completions call sites.
+
     Returns True if patched, False if openai is not installed.
     """
     global _patched
@@ -90,150 +126,124 @@ def patch() -> bool:
 
         try:
             import openai  # noqa: F401
-            from openai.resources.chat.completions import Completions  # noqa: F401
+            from openai.resources.chat import completions as _completions
         except ImportError:
             return False
 
         from agent_lens.models import EventType
         from agent_lens.tracer import TraceContext, Tracer
 
-        _original_create = Completions.create
-        _original_acreate = Completions.acreate
+        def _make_sync(original, span_prefix: str):
+            def _patched_create(self_inner, *args, **kwargs):
+                tracer = Tracer.get_instance()
+                control = tracer._control
 
-        def _patched_create(self_inner, *args, **kwargs):
-            tracer = Tracer.get_instance()
-            control = tracer._control
+                # Check for injected result (pause/fork)
+                run_id = TraceContext.get_run_id() or "unknown"
+                injected = control.before_llm_call(run_id)
+                if injected is not None:
+                    return injected
 
-            # Check for injected result (pause/fork)
-            run_id = TraceContext.get_run_id() or "unknown"
-            injected = control.before_llm_call(run_id)
-            if injected is not None:
-                return injected
+                model = kwargs.get("model", args[0] if args else "unknown")
+                messages = kwargs.get("messages", [])
 
-            model = kwargs.get("model", args[0] if args else "unknown")
-            messages = kwargs.get("messages", [])
+                span = tracer.start_span(f"{span_prefix}({model})", "llm")
+                start_time = time.time()
 
-            span = tracer.start_span(f"openai.chat({model})", "llm")
-            start_time = time.time()
+                tracer.record_event(
+                    EventType.LLM_START,
+                    _start_data(model, messages, kwargs),
+                    span_id=span.id,
+                )
 
-            # Record LLM_START
-            tracer.record_event(
-                EventType.LLM_START,
-                {
-                    "provider": "openai",
-                    "model": model,
-                    "messages": _extract_messages(messages),
-                    "kwargs": {
-                        k: v for k, v in kwargs.items()
-                        if k not in ("messages", "api_key")
-                    },
-                },
-                span_id=span.id,
-            )
+                try:
+                    response = original(self_inner, *args, **kwargs)
+                except Exception as exc:
+                    tracer.end_span(span, status="error", output={"error": str(exc)})
+                    raise
 
-            try:
-                response = _original_create(self_inner, *args, **kwargs)
-            except Exception as exc:
-                tracer.end_span(span, status="error", output={"error": str(exc)})
-                raise
+                latency_ms = (time.time() - start_time) * 1000
+                tracer.record_event(
+                    EventType.LLM_END,
+                    _end_data(model, response, latency_ms),
+                    span_id=span.id,
+                )
+                tracer.end_span(span, status="ok")
+                return response
 
-            latency_ms = (time.time() - start_time) * 1000
+            return _patched_create
 
-            # Extract usage info
-            usage = getattr(response, "usage", None)
-            prompt_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
-            completion_tokens = getattr(usage, "completion_tokens", 0) if usage else 0
-            cost = _estimate_cost(model, prompt_tokens, completion_tokens)
+        def _make_async(original, span_prefix: str):
+            async def _patched_acreate(self_inner, *args, **kwargs):
+                tracer = Tracer.get_instance()
+                control = tracer._control
 
-            # Record LLM_END
-            tracer.record_event(
-                EventType.LLM_END,
-                {
-                    "provider": "openai",
-                    "model": model,
-                    "latency_ms": latency_ms,
-                    "prompt_tokens": prompt_tokens,
-                    "completion_tokens": completion_tokens,
-                    "total_tokens": prompt_tokens + completion_tokens,
-                    "cost_usd": cost,
-                    "response": _safe_response_dict(response),
-                },
-                span_id=span.id,
-            )
-            tracer.end_span(span, status="ok")
-            return response
+                run_id = TraceContext.get_run_id() or "unknown"
+                injected = control.before_llm_call(run_id)
+                if injected is not None:
+                    return injected
 
-        async def _patched_acreate(self_inner, *args, **kwargs):
-            tracer = Tracer.get_instance()
-            control = tracer._control
+                model = kwargs.get("model", args[0] if args else "unknown")
+                messages = kwargs.get("messages", [])
 
-            run_id = TraceContext.get_run_id() or "unknown"
-            injected = control.before_llm_call(run_id)
-            if injected is not None:
-                return injected
+                span = tracer.start_span(f"{span_prefix}({model})", "llm")
+                start_time = time.time()
 
-            model = kwargs.get("model", args[0] if args else "unknown")
-            messages = kwargs.get("messages", [])
+                tracer.record_event(
+                    EventType.LLM_START,
+                    _start_data(model, messages, kwargs),
+                    span_id=span.id,
+                )
 
-            span = tracer.start_span(f"openai.achat({model})", "llm")
-            start_time = time.time()
+                try:
+                    response = await original(self_inner, *args, **kwargs)
+                except Exception as exc:
+                    tracer.end_span(span, status="error", output={"error": str(exc)})
+                    raise
 
-            tracer.record_event(
-                EventType.LLM_START,
-                {
-                    "provider": "openai",
-                    "model": model,
-                    "messages": _extract_messages(messages),
-                },
-                span_id=span.id,
-            )
+                latency_ms = (time.time() - start_time) * 1000
+                tracer.record_event(
+                    EventType.LLM_END,
+                    _end_data(model, response, latency_ms),
+                    span_id=span.id,
+                )
+                tracer.end_span(span, status="ok")
+                return response
 
-            try:
-                response = await _original_acreate(self_inner, *args, **kwargs)
-            except Exception as exc:
-                tracer.end_span(span, status="error", output={"error": str(exc)})
-                raise
+            return _patched_acreate
 
-            latency_ms = (time.time() - start_time) * 1000
-            usage = getattr(response, "usage", None)
-            prompt_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
-            completion_tokens = getattr(usage, "completion_tokens", 0) if usage else 0
+        # (owner attribute on the completions module, method, factory, span name).
+        # Every target is optional: the sync and async classes have been renamed
+        # and relocated across SDK majors, and a missing one must degrade to
+        # reduced capture rather than break the caller's import.
+        targets = (
+            ("Completions", "create", _make_sync, "openai.chat"),
+            ("AsyncCompletions", "create", _make_async, "openai.achat"),
+        )
 
-            tracer.record_event(
-                EventType.LLM_END,
-                {
-                    "provider": "openai",
-                    "model": model,
-                    "latency_ms": latency_ms,
-                    "prompt_tokens": prompt_tokens,
-                    "completion_tokens": completion_tokens,
-                    "cost_usd": _estimate_cost(model, prompt_tokens, completion_tokens),
-                    "response": _safe_response_dict(response),
-                },
-                span_id=span.id,
-            )
-            tracer.end_span(span, status="ok")
-            return response
+        patched_any = False
+        for owner_name, attr, factory, span_prefix in targets:
+            owner = getattr(_completions, owner_name, None)
+            if owner is None:
+                continue
+            original = getattr(owner, attr, None)
+            if original is None:
+                continue
 
-        Completions.create = _patched_create
-        Completions.acreate = _patched_acreate
-        _patched = True
-        return True
+            _originals[(owner, attr)] = original
+            setattr(owner, attr, factory(original, span_prefix))
+            patched_any = True
+
+        _patched = patched_any
+        return patched_any
 
 
 def unpatch() -> None:
-    """Remove the monkey-patch (mainly for testing)."""
+    """Restore the original SDK callables. Safe to call when not patched."""
     global _patched
 
     with _patch_lock:
-        if not _patched:
-            return
-        try:
-            import openai  # noqa: F401
-            from openai.resources.chat.completions import Completions  # noqa: F401
-        except ImportError:
-            return
-
-        # Restore originals stored in the closure — we can't easily unwrap,
-        # so we reset the flag and the patch won't apply again.
+        for (owner, attr), original in _originals.items():
+            setattr(owner, attr, original)
+        _originals.clear()
         _patched = False

@@ -24,7 +24,7 @@ from agent_lens import dashboard_launcher as dashboard
 from agent_lens.models import Event, EventType, Run, RunStatus, Span
 from agent_lens.tracer import Tracer, trace, trace_span  # noqa: F401
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __author__ = "Raju S"
 __email__ = "rajub4u927@gmail.com"
 
