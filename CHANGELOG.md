@@ -2,6 +2,36 @@
 
 All notable changes to agent-lens are documented here.
 
+## [0.3.1] - 2026-09-02
+
+### Fixed
+- `@agent_lens.trace` raised `TypeError: Object of type X is not JSON serializable`
+  for any function returning a value that is not a str, dict, list or number —
+  including returning the provider's response object directly, which is the most
+  natural thing an agent function does. The decorator stores the return value and
+  the store writes JSON, so a live object reached `json.dumps` and the exception
+  surfaced inside the caller's own stack: the tracer broke the application it was
+  observing. Values are now coerced — pydantic models keep their structure via
+  `model_dump()`, anything else degrades to a redacted `repr`.
+- The end-to-end provider suites now mock at the transport rather than through
+  respx. **respx had not merely stopped matching routes: openai 3.7.0 and
+  anthropic 1.3.0 have both migrated to `httpx2`, and respx patches `httpx`** —
+  so it was instrumenting a library the SDKs no longer use and every mock was an
+  inert no-op. Passing an `httpx.Client` to either SDK is now a hard `TypeError`
+  naming `httpx2.Client`, which is the same migration seen from the other side.
+  The mock is installed on the client under test via `http_client=`, and each
+  suite carries a positive control asserting the mocked transport actually
+  received the request — so this cannot silently degrade again. With the SDKs
+  installed the suite now runs 296 tests and skips none, where it previously
+  skipped 11 or made live calls.
+- `test_openai_error_span_marked_as_error` expected a `RuntimeError` from a 401.
+  The SDK raises `openai.AuthenticationError`; the assertion had never been
+  validated because the suite always skipped.
+
+### Changed
+- The `AGENT_LENS_LIVE_E2E` opt-in added moments earlier in 0.3.0 is gone. It was
+  the right guard for a suite that made real calls; the suite no longer does.
+
 ## [0.3.0] - 2026-09-02
 
 ### Fixed

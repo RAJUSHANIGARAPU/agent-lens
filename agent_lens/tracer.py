@@ -55,14 +55,35 @@ def _redact_string(value: str) -> str:
 
 
 def _redact_value(value: Any) -> Any:
-    """Recursively redact secrets from a value (dict, list, or str)."""
+    """
+    Recursively redact secrets, returning something the store can serialise.
+
+    Everything here ends up in SQLite as JSON, so an unknown type cannot be
+    passed through untouched: `@trace` on a function that returns an SDK
+    response object — the most natural thing an agent function does — used to
+    reach `json.dumps` with a live object and raise `TypeError` inside the
+    caller's own call stack. A tracer must never break the application it is
+    observing, so an unrepresentable value degrades to its repr instead.
+    """
     if isinstance(value, str):
         return _redact_string(value)
     if isinstance(value, dict):
         return {k: _redact_value(v) for k, v in value.items()}
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple, set)):
         return [_redact_value(item) for item in value]
-    return value
+    if isinstance(value, (bool, int, float)) or value is None:
+        return value
+
+    # Pydantic models — both provider SDKs return these — carry real structure
+    # worth keeping, so prefer dumping them over stringifying them.
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        try:
+            return _redact_value(model_dump())
+        except Exception:
+            pass
+
+    return _redact_string(repr(value))
 
 
 def redact(data: dict[str, Any]) -> dict[str, Any]:

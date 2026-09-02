@@ -397,3 +397,65 @@ class TestPersistence:
             assert r.id == rid
 
         store.close()
+
+
+class TestReturnValueSerialisation:
+    """
+    `@trace` stores a function's return value, and the store writes JSON.
+
+    Returning an SDK response object — the most natural thing an agent function
+    does — used to reach `json.dumps` as a live object and raise `TypeError`
+    inside the caller's own stack. A tracer must never break the application it
+    observes, so an unrepresentable value degrades instead.
+    """
+
+    def test_tracing_a_function_returning_a_plain_object_does_not_raise(self, reset_singletons):
+        class Thing:
+            def __init__(self):
+                self.x = 1
+
+        @trace
+        def returns_an_object():
+            return Thing()
+
+        returns_an_object()  # must not raise
+
+        assert len(reset_singletons.get_runs()) == 1
+
+    def test_pydantic_style_return_keeps_its_structure(self, reset_singletons):
+        class Response:
+            def model_dump(self):
+                return {"id": "resp_1", "usage": {"total_tokens": 40}}
+
+        @trace
+        def returns_a_model():
+            return Response()
+
+        returns_a_model()
+
+        run = reset_singletons.get_runs()[0]
+        blob = str([e.data for e in reset_singletons.get_events(run.id)])
+        assert "resp_1" in blob, "a dumpable response should be captured, not stringified"
+
+    def test_unserialisable_return_is_still_redacted(self, reset_singletons):
+        class Leaky:
+            def __repr__(self):
+                return "Leaky(key=sk-abcdefghijklmnop1234567890)"
+
+        @trace
+        def returns_a_leaky_object():
+            return Leaky()
+
+        returns_a_leaky_object()
+
+        run = reset_singletons.get_runs()[0]
+        blob = str([e.data for e in reset_singletons.get_events(run.id)])
+        assert "sk-abcdefghijklmnop1234567890" not in blob
+        assert "[REDACTED]" in blob
+
+    def test_primitives_are_unchanged(self, reset_singletons):
+        @trace
+        def returns_a_number():
+            return 42
+
+        assert returns_a_number() == 42
