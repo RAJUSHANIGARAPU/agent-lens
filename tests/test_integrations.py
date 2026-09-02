@@ -93,7 +93,11 @@ class _OACompletions:
     def create(self, *args, **kwargs):
         return _OAResp()
 
-    async def acreate(self, *args, **kwargs):
+
+class _OAAsyncCompletions:
+    """The SDK's async client is a separate class, not an `acreate` method."""
+
+    async def create(self, *args, **kwargs):
         return _OAResp()
 
 
@@ -104,16 +108,26 @@ class _OABoom(_OACompletions):
 
 @pytest.fixture
 def openai_patched(monkeypatch):
-    """Install a fake `openai` and apply the agent-lens patch. Yields the class."""
+    """
+    Install a fake `openai` and apply the agent-lens patch. Yields the class.
+
+    Pass `async_cls` to also register the asynchronous call site: the SDK exposes
+    it as `AsyncCompletions.create`, not as an `acreate` method on the sync class.
+    """
     from agent_lens.integrations import openai as oai
 
-    def _make(cls):
+    oai.unpatch()
+
+    def _make(cls, async_cls=None):
         _install_provider(monkeypatch, "openai.resources.chat.completions", "Completions", cls)
-        monkeypatch.setattr(oai, "_patched", False)
+        if async_cls is not None:
+            sys.modules["openai.resources.chat.completions"].AsyncCompletions = async_cls
         assert oai.patch() is True
         return cls
 
-    return _make
+    yield _make
+
+    oai.unpatch()
 
 
 def test_openai_records_start_and_end(openai_patched):
@@ -181,10 +195,10 @@ def test_openai_injection_bypasses_real_call(openai_patched):
 
 
 async def test_openai_async_capture(openai_patched):
-    Completions = openai_patched(_OACompletions)
+    openai_patched(_OACompletions, async_cls=_OAAsyncCompletions)
     run = Tracer.get_instance().start_run("t")
 
-    resp = await Completions().acreate(
+    resp = await _OAAsyncCompletions().create(
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": "hi"}],
     )
@@ -226,15 +240,26 @@ class _AntBoom:
 
 @pytest.fixture
 def anthropic_patched(monkeypatch):
+    """
+    Install a fake `anthropic` and apply the agent-lens patch.
+
+    Pass `async_cls` to also register the asynchronous call site, which the SDK
+    exposes as `AsyncMessages.create`.
+    """
     from agent_lens.integrations import anthropic as ant
 
-    def _make(cls):
+    ant.unpatch()
+
+    def _make(cls, async_cls=None):
         _install_provider(monkeypatch, "anthropic.resources.messages", "Messages", cls)
-        monkeypatch.setattr(ant, "_patched", False)
+        if async_cls is not None:
+            sys.modules["anthropic.resources.messages"].AsyncMessages = async_cls
         assert ant.patch() is True
         return cls
 
-    return _make
+    yield _make
+
+    ant.unpatch()
 
 
 def test_anthropic_records_tokens_cost_and_thinking(anthropic_patched):
@@ -587,16 +612,18 @@ def test_anthropic_helpers_extract_and_thinking():
 
 # ---- anthropic async capture -------------------------------------
 
-class _AntMessagesAsync(_AntMessages):
-    async def acreate(self, *args, **kwargs):
+class _AntMessagesAsync:
+    """The SDK's async client is `AsyncMessages`, with a `create` coroutine."""
+
+    async def create(self, *args, **kwargs):
         return _AntResp()
 
 
 async def test_anthropic_async_capture(anthropic_patched):
-    Messages = anthropic_patched(_AntMessagesAsync)
+    anthropic_patched(_AntMessages, async_cls=_AntMessagesAsync)
     run = Tracer.get_instance().start_run("t")
 
-    resp = await Messages().acreate(
+    resp = await _AntMessagesAsync().create(
         model="claude-3-haiku-20240307",
         messages=[{"role": "user", "content": "hi"}],
     )
@@ -607,29 +634,29 @@ async def test_anthropic_async_capture(anthropic_patched):
 
 # ---- openai async injection + error ------------------------------
 
-class _OABoomAsync(_OACompletions):
-    async def acreate(self, *args, **kwargs):
+class _OABoomAsync:
+    async def create(self, *args, **kwargs):
         raise ValueError("async upstream 500")
 
 
 async def test_openai_async_injection_bypasses_call(openai_patched):
-    Completions = openai_patched(_OACompletions)
+    openai_patched(_OACompletions, async_cls=_OAAsyncCompletions)
     run = Tracer.get_instance().start_run("t")
 
     sentinel = {"injected": True}
     ControlPlane.get_instance().inject(run.id, sentinel)
 
-    resp = await Completions().acreate(model="gpt-4o", messages=[])
+    resp = await _OAAsyncCompletions().create(model="gpt-4o", messages=[])
     assert resp is sentinel
     assert EventType.LLM_START not in _types(_events_for_run(run.id))
 
 
 async def test_openai_async_error_path(openai_patched):
-    Completions = openai_patched(_OABoomAsync)
+    openai_patched(_OACompletions, async_cls=_OABoomAsync)
     run = Tracer.get_instance().start_run("t")
 
     with pytest.raises(ValueError, match="async upstream 500"):
-        await Completions().acreate(model="gpt-4o", messages=[])
+        await _OABoomAsync().create(model="gpt-4o", messages=[])
 
     types_ = _types(_events_for_run(run.id))
     assert EventType.LLM_START in types_

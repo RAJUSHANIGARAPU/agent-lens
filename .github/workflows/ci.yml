@@ -51,6 +51,29 @@ jobs:
           name: codecov-umbrella
           fail_ci_if_error: false
 
+  sdk-surface:
+    name: Vendor SDK surface
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      # The integration suite runs against stubs everywhere else, which proves
+      # the wrapper logic but not that it is bolted to attributes the vendors
+      # still ship. This job installs the real SDKs so that check actually runs
+      # instead of skipping.
+      - name: Install dependencies with vendor SDKs
+        run: pip install -e ".[dev,sdks]"
+
+      - name: Run integration tests against the real SDKs
+        run: pytest tests/integrations/ -v
+
   security:
     name: Security audit
     runs-on: ubuntu-latest
