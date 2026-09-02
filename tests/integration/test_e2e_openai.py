@@ -10,6 +10,7 @@ Verifies:
 """
 
 import json
+import os
 import time
 
 import pytest
@@ -32,9 +33,27 @@ except ImportError:
     OPENAI_AVAILABLE = False
 
 
+# respx no longer intercepts this SDK. Verified against openai 3.7.0 / httpx
+# 0.28.1 / respx 0.23.1: the route is never matched (`route.called is False`) and
+# the request reaches api.openai.com, which answers 401 for the fake key below.
+#
+# That makes these tests actively unsafe rather than merely broken — run with a
+# real OPENAI_API_KEY in the environment and they bill the account and send the
+# prompts upstream. They only ever stayed quiet because the `dev` extra does not
+# install the provider SDKs, so the guard above skipped them by accident rather
+# than by intent.
+#
+# Requiring an explicit opt-in makes the live call a decision instead of a side
+# effect. Fixing the interception (an httpx MockTransport passed to the client,
+# rather than respx's global patching) is tracked separately.
+RUN_LIVE_E2E = os.environ.get("AGENT_LENS_LIVE_E2E") == "1"
+
 pytestmark = pytest.mark.skipif(
-    not (RESPX_AVAILABLE and OPENAI_AVAILABLE),
-    reason="respx and openai are required for this test",
+    not (RESPX_AVAILABLE and OPENAI_AVAILABLE and RUN_LIVE_E2E),
+    reason=(
+        "makes REAL calls to api.openai.com — respx does not intercept "
+        "openai>=3/httpx>=0.28. Set AGENT_LENS_LIVE_E2E=1 to opt in."
+    ),
 )
 
 MOCK_RESPONSE = {

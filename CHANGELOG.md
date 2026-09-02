@@ -27,6 +27,15 @@ All notable changes to agent-lens are documented here.
 - `test_llamaindex_noop_when_unavailable` inferred "llama-index is not installed"
   from the environment, so it inverted and failed in any job that does install
   it. It now forces the unavailable path explicitly.
+- The `tests/integration` end-to-end suite believed it was mocked and was making
+  **real calls to api.openai.com and api.anthropic.com**. respx no longer
+  intercepts these SDKs — verified against openai 3.7.0 / anthropic 1.3.0 /
+  httpx 0.28.1 / respx 0.23.1, where the route is never matched and the request
+  reaches the vendor. It went unnoticed because the suite skipped whenever the
+  provider SDK was absent, which the `dev` extra guarantees. Run with a real key
+  exported it would have billed the account and sent the prompts upstream. The
+  suite is now gated behind an explicit `AGENT_LENS_LIVE_E2E=1` opt-in, so a live
+  call is a decision rather than a side effect of installing a package.
 
 ### Added
 - `tests/integrations/test_sdk_surface.py` — asserts that the attributes the
