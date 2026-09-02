@@ -2,6 +2,18 @@
 
 All notable changes to agent-lens are documented here.
 
+## [Unreleased]
+
+### Added
+- `AGENT_LENS_REQUIRE_SDKS=1` promotes a skipped vendor-surface check to a
+  failure. In the jobs that install the real SDKs there is no legitimate reason
+  for those checks to skip, and a skip there is worse than a failure: a failing
+  test is a signal, a skipped one is the absence of one, and from outside both
+  look like a green build. That is precisely how the `install()` crash survived
+  four months. Set in the `sdk-surface` CI job and in the release `verify` gate.
+  Implemented as a report hook rather than by hardening `importorskip`, so it
+  catches a skip from any cause rather than only the anticipated one.
+
 ## [0.3.1] - 2026-09-02
 
 ### Fixed

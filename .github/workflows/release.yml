@@ -58,7 +58,12 @@ jobs:
       - name: Lint
         run: ruff check agent_lens/ tests/
 
+      # The vendors are installed here, so a skipped surface check means the
+      # check did not run — do not publish on the strength of a run that
+      # verified nothing.
       - name: Test, including the vendor surface checks
+        env:
+          AGENT_LENS_REQUIRE_SDKS: "1"
         run: pytest tests/ -q
 
   build:
