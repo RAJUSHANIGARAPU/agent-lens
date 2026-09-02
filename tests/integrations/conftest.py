@@ -17,10 +17,48 @@ silently drift away from the vendors.
 
 from __future__ import annotations
 
+import os
 import sys
 import types
 
 import pytest
+
+# In the CI job that installs the real vendor SDKs there is no legitimate reason
+# for a surface check to skip, and a skip there is worse than a failure: a failing
+# test is a signal, a skipped one is the *absence* of a signal, and from outside
+# both look like a green build. That is how the OpenAI crash survived four months
+# — the suite skipped whenever the SDK was missing, which it always was.
+#
+# So in that job, skipping is promoted to failing. Deliberately implemented as a
+# report hook rather than by hardening `importorskip`, because it has to catch a
+# skip from *any* cause, not just the one we happen to have thought of.
+REQUIRE_SDKS = os.environ.get("AGENT_LENS_REQUIRE_SDKS") == "1"
+
+_NO_SKIP_MODULES = ("test_sdk_surface",)
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_makereport(item, call):
+    report = yield
+
+    if (
+        REQUIRE_SDKS
+        and report.skipped
+        and any(name in str(item.fspath) for name in _NO_SKIP_MODULES)
+    ):
+        reason = ""
+        if isinstance(report.longrepr, tuple) and len(report.longrepr) == 3:
+            reason = report.longrepr[2]
+        report.outcome = "failed"
+        report.longrepr = (
+            f"{item.nodeid} SKIPPED while AGENT_LENS_REQUIRE_SDKS=1.\n"
+            f"Reason given: {reason or '<none>'}\n\n"
+            "This job exists to check the integrations against the real vendor SDKs. "
+            "A skip here means that check did not happen, and a run that verifies "
+            "nothing must not report success."
+        )
+
+    return report
 
 
 def _make_package(name: str) -> types.ModuleType:
