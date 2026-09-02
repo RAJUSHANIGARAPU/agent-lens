@@ -46,6 +46,14 @@ dev = [
     "respx>=0.21.0",
     "ruff>=0.4.0",
 ]
+# Real vendor SDKs, needed only to verify that the attributes the integrations
+# patch still exist upstream (tests/integrations/test_sdk_surface.py). Kept out
+# of `dev` so the default matrix stays offline and fast; installed by the
+# dedicated sdk-surface CI job.
+sdks = [
+    "openai>=1.0.0",
+    "anthropic>=0.30.0",
+]
 
 [project.scripts]
 agent-lens = "agent_lens.cli:app"
