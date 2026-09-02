@@ -24,6 +24,9 @@ All notable changes to agent-lens are documented here.
 - An Anthropic message object that raised during serialisation propagated out of
   the traced call. Both integrations now degrade to a described placeholder
   rather than breaking the application being observed.
+- `test_llamaindex_noop_when_unavailable` inferred "llama-index is not installed"
+  from the environment, so it inverted and failed in any job that does install
+  it. It now forces the unavailable path explicitly.
 
 ### Added
 - `tests/integrations/test_sdk_surface.py` — asserts that the attributes the
@@ -33,9 +36,18 @@ All notable changes to agent-lens are documented here.
   the async path, all passing, because the fake SDK was shaped around what the
   code called instead of around what the vendors ship. Every other test in the
   suite runs against stubs by design — this is the one that checks the seam.
+- Surface checks for the two callback integrations as well. They have the same
+  seam in a different shape: they subclass a vendor base and override the hooks
+  the framework calls, so a renamed hook would simply never fire — no error, no
+  span, no trace. The check asserts that the real base class was imported (not
+  the `object` fallback, which would swallow a rename silently), that every hook
+  the handler overrides exists upstream, and that the handler instantiates
+  against the real base. The hook list is derived by introspection, so a hook
+  added later is checked automatically. Verified against langchain-core 1.6.1 and
+  llama-index-core 0.14.24: both are currently correct.
 - A `sdks` extra and a matching `sdk-surface` CI job that installs the real
-  openai and anthropic packages, so the surface check runs instead of skipping.
-  The default matrix stays offline and fast.
+  openai, anthropic, langchain-core and llama-index-core packages, so the surface
+  checks run instead of skipping. The default matrix stays offline and fast.
 - Direct unit coverage for the payload builders and pricing resolution, taking
   `openai.py` and `anthropic.py` to 100%.
 
