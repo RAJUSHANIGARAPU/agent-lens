@@ -26,13 +26,18 @@ All notable changes to agent-lens are documented here.
   rather than breaking the application being observed.
 
 ### Added
-- Offline test coverage for the provider capture layer, which was previously
-  untested end to end: the integrations run against a stub SDK installed into
-  `sys.modules`, so the suite needs no vendor dependency and no network.
-- `tests/integrations/test_sdk_surface.py` — asserts the attributes the
-  integrations patch actually exist on the installed vendor SDKs. Skips when a
-  vendor is absent, and fails loudly in any job that installs them. This is the
-  check that would have caught the `install()` crash before release.
+- `tests/integrations/test_sdk_surface.py` — asserts that the attributes the
+  integrations patch actually exist on the installed vendor SDKs, and that
+  `install()` returns rather than raises. Coverage did not catch any of the bugs
+  above: the capture layer was at 85–93% and four tests specifically exercised
+  the async path, all passing, because the fake SDK was shaped around what the
+  code called instead of around what the vendors ship. Every other test in the
+  suite runs against stubs by design — this is the one that checks the seam.
+- A `sdks` extra and a matching `sdk-surface` CI job that installs the real
+  openai and anthropic packages, so the surface check runs instead of skipping.
+  The default matrix stays offline and fast.
+- Direct unit coverage for the payload builders and pricing resolution, taking
+  `openai.py` and `anthropic.py` to 100%.
 
 ### Changed
 - Async spans are named `openai.achat(...)` and `anthropic.amessages(...)`, and
