@@ -10,9 +10,14 @@ coverage while a crash lived in one of them.
 Instead we install a *stub* SDK into ``sys.modules`` that mirrors the real
 import paths and class names, and let ``patch()`` bind to classes we control.
 The wrapper logic under test is agent-lens code; the SDK only has to be shaped
-like the real one. The shape itself is pinned by
-``test_sdk_surface.py::test_stub_matches_real_sdk_surface``, so the stubs cannot
-silently drift away from the vendors.
+like the real one. The shape is pinned per vendor rather than by one
+consolidated test: ``test_sdk_surface.py`` holds ``TestOpenAISurface``,
+``TestAnthropicSurface``, ``TestLangChainSurface`` and
+``TestLlamaIndexSurface``, each checking the real call sites and overridden
+hooks — ``test_sync_call_site_exists``, ``test_async_call_site_exists``,
+``test_every_overridden_hook_exists_on_the_vendor_base`` — against the
+vendor SDKs in the job that installs them, so the stubs cannot silently
+drift away from the vendors.
 """
 
 from __future__ import annotations
