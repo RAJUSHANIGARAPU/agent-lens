@@ -24,6 +24,14 @@ are reported as skipped rather than run.
 
 ## What is tested and how
 
+Note on the command output below: every `--collect-only` run in this section
+also emits its own coverage table (from `addopts` in `pyproject.toml`) and,
+for the two full `-q` runs later in this document, per-test progress dots
+rather than per-test lines — both are omitted from every block below for
+length, alongside the individual test node IDs; only the final collected/
+skipped count and, later, the full coverage table and pass/skip summary are
+kept.
+
 The full file inventory under `tests/`:
 
 ```
@@ -193,14 +201,40 @@ TOTAL                                    1770    119    93%
 ```
 
 `agent_lens/dashboard_launcher.py` is the weakest module in this table at 32%
-covered — none of the suite drives the actual browser-launch path. The
-weakest line in the wrapper code is `_textutil.py` at 78%.
+covered — none of the suite drives the actual browser-launch path. Among the
+vendor-integration wrapper modules specifically (`agent_lens/integrations/*`),
+the weakest is `langchain.py` at 88%; the lowest coverage figure in the table
+overall outside `dashboard_launcher.py` is `_textutil.py`'s 78%, a shared
+text-formatting helper rather than a wrapper module.
 
-The 17 skips break down as: the 2 real-SDK e2e tests shown above, plus 15 in
-`test_sdk_surface.py` (checked with `-rs`) — all of them skip because none of
-`openai`, `anthropic`, `langchain-core` or `llama-index-core` is installed in
-this environment. That is expected here and is the subject of the first item
-under "What this suite does not catch" below.
+The 17 skips break down as: 2 real-SDK e2e tests, plus 15 in
+`test_sdk_surface.py` — all of them skip because none of `openai`,
+`anthropic`, `langchain-core` or `llama-index-core` is installed in this
+environment:
+
+```
+$ python -m pytest -q -rs | grep SKIPPED
+SKIPPED [1] tests/integration/test_e2e_anthropic.py:21: anthropic SDK not installed
+SKIPPED [1] tests/integration/test_e2e_openai.py:21: openai SDK not installed
+SKIPPED [1] tests/integrations/test_sdk_surface.py:47: openai SDK not installed in this job
+SKIPPED [1] tests/integrations/test_sdk_surface.py:51: openai SDK not installed in this job
+SKIPPED [1] tests/integrations/test_sdk_surface.py:55: openai SDK not installed in this job
+SKIPPED [1] tests/integrations/test_sdk_surface.py:63: openai SDK not installed in this job
+SKIPPED [1] tests/integrations/test_sdk_surface.py:75: anthropic SDK not installed in this job
+SKIPPED [1] tests/integrations/test_sdk_surface.py:79: anthropic SDK not installed in this job
+SKIPPED [1] tests/integrations/test_sdk_surface.py:83: anthropic SDK not installed in this job
+SKIPPED [1] tests/integrations/test_sdk_surface.py:86: anthropic SDK not installed in this job
+SKIPPED [1] tests/integrations/test_sdk_surface.py:112: langchain-core not installed in this job
+SKIPPED [1] tests/integrations/test_sdk_surface.py:124: langchain-core not installed in this job
+SKIPPED [1] tests/integrations/test_sdk_surface.py:133: langchain-core not installed in this job
+SKIPPED [1] tests/integrations/test_sdk_surface.py:147: llama-index-core not installed in this job
+SKIPPED [1] tests/integrations/test_sdk_surface.py:153: llama-index-core not installed in this job
+SKIPPED [1] tests/integrations/test_sdk_surface.py:159: llama-index-core not installed in this job
+SKIPPED [1] tests/integrations/test_sdk_surface.py:170: llama-index-core not installed in this job
+```
+
+That is expected here and is the subject of the first item under "What this
+suite does not catch" below.
 
 CI job names, from the workflow file:
 
@@ -216,9 +250,12 @@ $ grep -nE '^  [a-z-]+:$' .github/workflows/ci.yml
 That regex also matches the `push:` key under the workflow's `on:` trigger
 block, which is why it returns five lines rather than four — the four actual
 jobs are `test`, `sdk-surface`, `security`, and `build`. `test` runs the
-default suite shown above; `sdk-surface` re-runs `tests/integrations/` with
-the real vendor SDKs installed; `security` runs the security tests plus a
-dependency audit; `build` packages the project.
+default suite shown above (this is also where `tests/security/` runs — there
+is no separate test-running step for it); `sdk-surface` re-runs
+`tests/integrations/` with the real vendor SDKs installed; `security` runs
+only `pip-audit` against the project's dependencies, with `continue-on-error:
+true` (see "What this suite does not catch" below — that means this job can
+never fail the build); `build` packages the project.
 
 ## Why one test file runs against the real SDKs
 
