@@ -46,11 +46,89 @@ You're left with a versioned record of every hypothesis you tested. Future-you (
 
 ---
 
-## Install in 30 seconds
+## Quickstart (60 seconds, no API key)
+
+Paste this into a terminal. No API key, no account, no Docker — it records two runs in a throwaway
+local database, forks the second from the first with a stated hypothesis, and asks the diff
+endpoint whether the hypothesis held.
 
 ```bash
 pip install agentlens-tracer
+python - <<'PY'
+import json
+import tempfile
+import time
+import urllib.request
+import uuid
+
+import agent_lens
+from agent_lens.models import Event, EventType, Run, RunStatus, Span
+from agent_lens.store import Store
+
+store = Store(path=tempfile.mktemp(suffix=".db"))  # throwaway db, nothing to clean up
+url = agent_lens.dashboard.start(store=store, open_browser=False)
+
+now = time.time()
+run_a, span_a = str(uuid.uuid4()), str(uuid.uuid4())
+run_b, span_b = str(uuid.uuid4()), str(uuid.uuid4())
+verbose = "A long, thorough, pedagogical answer covering every edge case."
+concise = "A concise answer."
+
+# Run A - the baseline.
+store.save_run(Run(id=run_a, name="verbose_agent", status=RunStatus.COMPLETED,
+                   start_time=now - 3, end_time=now - 1.2))
+store.save_span(Span(id=span_a, run_id=run_a, name="chat.completions", type="llm",
+                     start_time=now - 3, end_time=now - 1.2))
+store.save_event(Event(run_id=run_a, span_id=span_a, type=EventType.LLM_END,
+                       timestamp=now - 1.2,
+                       data={"latency_ms": 1847, "total_tokens": 453, "cost_usd": 0.0045,
+                             "response": {"choices": [{"message": {"content": verbose}}]}}))
+
+# Run B - a fork of A, carrying the hypothesis and the assertion.
+store.save_run(Run(id=run_b, name="concise_agent", status=RunStatus.COMPLETED,
+                   start_time=now - 1, end_time=now - 0.2,
+                   parent_run_id=run_a, fork_span_id=span_a,
+                   notes="Hypothesis: a shorter system prompt reduces verbosity",
+                   expected_output="concise"))
+store.save_span(Span(id=span_b, run_id=run_b, name="chat.completions", type="llm",
+                     start_time=now - 1, end_time=now - 0.2))
+store.save_event(Event(run_id=run_b, span_id=span_b, type=EventType.LLM_END,
+                       timestamp=now - 0.2,
+                       data={"latency_ms": 820, "total_tokens": 87, "cost_usd": 0.00087,
+                             "response": {"choices": [{"message": {"content": concise}}]}}))
+
+# GET /runs/{a}/diff/{b} - the same endpoint the dashboard calls.
+for _ in range(20):
+    try:
+        raw = urllib.request.urlopen(f"{url}/runs/{run_a}/diff/{run_b}", timeout=3).read()
+        break
+    except OSError:
+        time.sleep(0.5)
+else:
+    raise SystemExit("dashboard never answered - is port 7878 already in use?")
+
+diff = json.loads(raw)
+m = diff["metrics_delta"]
+print(f"\nDashboard: {url}")
+print(f"Latency: {m['latency_ms']['a']} ms -> {m['latency_ms']['b']} ms ({m['latency_ms']['pct_change']:+.1f}%)")
+print(f"Tokens: {m['total_tokens']['a']} -> {m['total_tokens']['b']} ({m['total_tokens']['pct_change']:+.1f}%)")
+print(f"Verdict: {diff['assertion_result']['verdict']}")
+PY
 ```
+
+`Verdict: improved` is the product in one line: the assertion attached to run B
+(`expected_output: "concise"`) failed in A and passed in B, and you have the token and latency
+numbers to go with it. The script uses a temporary database and exits as soon as it prints, so the
+dashboard shuts down with it — for a dashboard you can click through, drop the `path=` argument
+(traces then persist to `~/.agent-lens/runs.db`) and run `agent-lens dashboard` in a second
+terminal.
+
+---
+
+## Trace a real OpenAI agent (requires `OPENAI_API_KEY`)
+
+Unlike the quickstart above, this one makes real, billable API calls: it needs
+`pip install agentlens-tracer openai` and `OPENAI_API_KEY` exported in your environment.
 
 ```python
 import agent_lens
