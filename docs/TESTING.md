@@ -57,10 +57,10 @@ tests/test_store_search.py
 tests/test_tracer.py
 ```
 
-That is 27 `.py` files. Six of them are `__init__.py`/`conftest.py`
+That is 27 `.py` files. Seven of them are `__init__.py`/`conftest.py`
 scaffolding rather than test modules with content of their own — one
-`__init__.py` and one `conftest.py` per directory except the flat root, which
-has only an `__init__.py`:
+`__init__.py` and one `conftest.py` per directory except `tests/security/`,
+which has only an `__init__.py`:
 
 ```
 $ find tests -name '*.py' ! -name '__init__.py' ! -name 'conftest.py' | wc -l
@@ -153,7 +153,12 @@ $ python -m pytest --collect-only -q
 287 tests collected in 0.42s
 ```
 
-(169 + 11 + 90 + 17 = 287, matching the four per-directory collections above.)
+(169 + 11 + 90 + 17 = 287, matching the four per-directory collections above.
+Note this 287 will not equal "passed + skipped" from the run below, 289 — two
+of the skips, `test_e2e_openai.py` and `test_e2e_anthropic.py`, use
+`pytest.importorskip` and are skipped at collection time, before they become
+individually numbered items, so `--collect-only` reports "0 items / 2 skipped"
+for those two files rather than counting them among the 287.)
 
 Full run, with coverage (the terminal `--cov-report=term-missing` table is
 already wired up via `addopts` in `pyproject.toml`, so a plain `pytest -q`
