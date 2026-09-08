@@ -2,7 +2,7 @@
 Overhead benchmark test.
 
 100 mocked LLM calls through tracer must complete in < 500ms total.
-(5ms per call budget)
+(5ms per call budget; 3x that on CI — see the comment on the assertion.)
 """
 
 import os
@@ -17,8 +17,9 @@ from agent_lens.tracer import Tracer, trace
 
 
 @pytest.mark.skipif(
-    sys.platform == "win32" or bool(os.environ.get("CI")),
-    reason="Performance benchmarks are only meaningful on local hardware",
+    sys.platform == "win32" or (bool(os.environ.get("CI")) and sys.platform != "linux"),
+    reason="Perf budget is gated on Linux CI and on local non-Windows machines; "
+    "shared macOS/Windows CI runners are too noisy to gate on",
 )
 class TestOverheadBenchmark:
     def test_100_traced_calls_under_500ms(self, reset_singletons):
@@ -44,9 +45,21 @@ class TestOverheadBenchmark:
         per_call_ms = elapsed_ms / N
         print(f"\nOverhead: {elapsed_ms:.1f}ms total / {per_call_ms:.2f}ms per call")
 
-        assert elapsed_ms < 500.0, (
+        # 500ms (5ms/call) is the developer-hardware budget README.md and
+        # CONTRIBUTING.md both quote. GitHub-hosted runners are shared 4-vCPU VMs
+        # with slower, noisier disks, and every traced call commits 7 SQLite
+        # transactions (run, span, event, span, event, status, FTS reindex), so
+        # wall-clock there is a small multiple of local. CI budget = 3x local =
+        # 1500ms (15ms/call). Calibration: the sibling budget below allows 2ms for a
+        # single-commit record_event, so ~2.1ms per commit here is the same order of
+        # slack this suite already accepts, not an open-ended number. A tracer
+        # regression past 3x its documented per-call budget still fails.
+        ci_multiplier = 3.0
+        limit_ms = 500.0 * ci_multiplier if os.environ.get("CI") else 500.0
+
+        assert elapsed_ms < limit_ms, (
             f"100 traced calls took {elapsed_ms:.1f}ms "
-            f"({per_call_ms:.2f}ms/call), limit is 500ms"
+            f"({per_call_ms:.2f}ms/call), limit is {limit_ms:.0f}ms"
         )
 
     def test_tracer_record_event_overhead(self, reset_singletons):
