@@ -7,9 +7,9 @@
    |______\___|_| |_|___/  \__|___(_)
 ```
 
-# **Run the scientific method on your LLM agent.**
+# **The framework-agnostic, local-first debugger for LLM agents.**
 
-State a hypothesis. Fork. Compare. Know if it actually worked.
+Pause any run, fork it into variants, and get a numeric verdict on which one actually worked.
 
 [![PyPI](https://img.shields.io/pypi/v/agentlens-tracer?color=6366f1)](https://pypi.org/project/agentlens-tracer)
 [![CI](https://github.com/RAJUSHANIGARAPU/agent-lens/actions/workflows/ci.yml/badge.svg)](https://github.com/RAJUSHANIGARAPU/agent-lens/actions)

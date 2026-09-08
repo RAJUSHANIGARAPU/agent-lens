@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "agentlens-tracer"
 version = "0.3.1"
-description = "The interactive debugger for LLM agents. Pause, inspect, and fork any agent mid-run."
+description = "Framework-agnostic, local-first debugger for LLM agents — pause, fork, and get a numeric verdict on which run actually worked."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
