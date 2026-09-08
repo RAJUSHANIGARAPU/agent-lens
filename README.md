@@ -48,9 +48,16 @@ You're left with a versioned record of every hypothesis you tested. Future-you (
 
 ## Quickstart (60 seconds, no API key)
 
-Paste this into a terminal. No API key, no account, no Docker — it records two runs in a throwaway
-local database, forks the second from the first with a stated hypothesis, and asks the diff
-endpoint whether the hypothesis held.
+Paste this into a terminal. No API key, no account, no Docker — it writes two runs into a
+throwaway local database, forks the second from the first with a stated hypothesis, and asks the
+diff endpoint whether the hypothesis held.
+
+**The two runs are sample data, not measurements.** Nothing here calls an LLM, so the latency and
+token figures below are written into the script by hand to stand in for a verbose agent and a
+concise one. What is real is everything that acts on them: the store, the dashboard, the
+`/runs/{a}/diff/{b}` endpoint, and the verdict — the same code paths a traced agent uses. For real
+numbers from real calls, see [Trace a real OpenAI agent](#trace-a-real-openai-agent-requires-openai_api_key)
+below.
 
 ```bash
 pip install agentlens-tracer
@@ -74,7 +81,8 @@ run_b, span_b = str(uuid.uuid4()), str(uuid.uuid4())
 verbose = "A long, thorough, pedagogical answer covering every edge case."
 concise = "A concise answer."
 
-# Run A - the baseline.
+# Run A - the baseline. The latency/token/cost figures here and in run B are
+# hand-written sample values, not measurements: nothing below calls an LLM.
 store.save_run(Run(id=run_a, name="verbose_agent", status=RunStatus.COMPLETED,
                    start_time=now - 3, end_time=now - 1.2))
 store.save_span(Span(id=span_a, run_id=run_a, name="chat.completions", type="llm",
@@ -117,8 +125,9 @@ PY
 ```
 
 `Verdict: improved` is the product in one line: the assertion attached to run B
-(`expected_output: "concise"`) failed in A and passed in B, and you have the token and latency
-numbers to go with it. The script uses a temporary database and exits as soon as it prints, so the
+(`expected_output: "concise"`) failed in A and passed in B, and the token and latency deltas are
+computed alongside it — from the sample values above, so treat the shape of the output as the
+point and not the percentages. The script uses a temporary database and exits as soon as it prints, so the
 dashboard shuts down with it — for a dashboard you can click through, drop the `path=` argument
 (traces then persist to `~/.agent-lens/runs.db`) and run `agent-lens dashboard` in a second
 terminal.
