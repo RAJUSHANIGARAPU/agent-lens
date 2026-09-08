@@ -272,6 +272,8 @@ You're not debugging a function — you're debugging a probabilistic system. Eve
 
 ---
 
+Not trying to replace hosted trace-analysis platforms like Langfuse or LangSmith. See [`docs/COMPARISON.md`](docs/COMPARISON.md) for honest positioning against the closest alternatives.
+
 ## How agent-lens compares
 
 | Feature                               | agent-lens | Langfuse        | LangSmith |
