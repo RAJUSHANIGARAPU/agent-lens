@@ -244,7 +244,7 @@ $ grep -nE '^  [a-z-]+:$' .github/workflows/ci.yml
 10:  test:
 54:  sdk-surface:
 83:  security:
-112:  build:
+109:  build:
 ```
 
 That regex also matches the `push:` key under the workflow's `on:` trigger
@@ -253,9 +253,8 @@ jobs are `test`, `sdk-surface`, `security`, and `build`. `test` runs the
 default suite shown above (this is also where `tests/security/` runs — there
 is no separate test-running step for it); `sdk-surface` re-runs
 `tests/integrations/` with the real vendor SDKs installed; `security` runs
-only `pip-audit` against the project's dependencies, with `continue-on-error:
-true` (see "What this suite does not catch" below — that means this job can
-never fail the build); `build` packages the project.
+`pip-audit` against the project's dependencies and fails the build on any
+finding; `build` packages the project.
 
 ## Why one test file runs against the real SDKs
 
@@ -348,16 +347,17 @@ class could ever surface, since a stub accepts any override name.
   drift goes undetected until a real user hits it, which is exactly what
   happened before `test_sdk_surface.py` existed.
 
-- **`pip-audit` in the security job does not fail the build.**
+- **`pip-audit` only sees published advisories for installed dependencies.**
 
   ```
-  $ grep -n 'continue-on-error' .github/workflows/ci.yml
-  110:        continue-on-error: true
+  $ grep -n 'pip-audit --skip-editable' .github/workflows/ci.yml
+  107:        run: pip-audit --skip-editable --desc
   ```
 
-  A dependency vulnerability finding is logged, not enforced. Someone has to
-  go read the job output; a green check mark on that job does not mean the
-  audit came back clean.
+  `--skip-editable` means the audit never inspects agent-lens itself, only
+  its third-party dependencies, and pip-audit can only flag a vulnerability
+  once it has been published to an advisory database. A finding does fail
+  the build now, but a not-yet-disclosed vulnerability still passes silently.
 
 - **The performance budget is never checked in CI.**
 

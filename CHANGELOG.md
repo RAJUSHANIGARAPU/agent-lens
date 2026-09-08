@@ -14,6 +14,14 @@ All notable changes to agent-lens are documented here.
   Implemented as a report hook rather than by hardening `importorskip`, so it
   catches a skip from any cause rather than only the anticipated one.
 
+### Changed
+- The `security` CI job's `pip-audit` step ran under `continue-on-error`, so
+  a finding was logged and the job still went green regardless. The three
+  CVEs it had been ignoring (CVE-2025-8869, CVE-2026-1703, CVE-2026-3219) are
+  all in pip itself, not an agent-lens dependency, and are cleared by
+  upgrading pip in the job rather than suppressed with `--ignore-vuln`. The
+  job now fails the build on any real finding.
+
 ## [0.3.1] - 2026-09-02
 
 ### Fixed

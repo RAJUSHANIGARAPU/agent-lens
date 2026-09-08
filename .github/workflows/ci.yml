@@ -93,21 +93,18 @@ jobs:
           python-version: "3.12"
           cache: "pip"
 
+      # The runner image ships whatever pip it was baked with, and pip-audit
+      # audits the environment it runs in — so a stale pip makes this job red
+      # for a vulnerability in the scanner's own toolchain rather than in this
+      # project. Upgrading pip first keeps the finding set about our deps.
       - name: Install pip-audit
-        run: pip install pip-audit
+        run: pip install --upgrade pip pip-audit
 
       - name: Install project
         run: pip install -e ".[dev]"
 
       - name: Run pip-audit (project deps only)
-        # Audit project dependencies only; pip itself is excluded via --ignore-vuln
-        # CVE-2025-8869, CVE-2026-1703, CVE-2026-3219 are in pip, not our deps
-        run: |
-          pip-audit --skip-editable --desc \
-            --ignore-vuln CVE-2025-8869 \
-            --ignore-vuln CVE-2026-1703 \
-            --ignore-vuln CVE-2026-3219
-        continue-on-error: true
+        run: pip-audit --skip-editable --desc
 
   build:
     name: Build distribution
