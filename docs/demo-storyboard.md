@@ -101,7 +101,7 @@ agent_lens.install()
 
 ```
 agent-lens
-The interactive debugger for AI agents.
+The framework-agnostic, local-first debugger for LLM agents.
 
 pip install agentlens-tracer
 ```
