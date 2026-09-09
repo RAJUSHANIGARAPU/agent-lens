@@ -379,10 +379,22 @@ class could ever surface, since a stub accepts any override name.
   and `agent_lens/_textutil.py` at 78% — neither number is enforced as a
   floor, so a regression in either could ship without any test noticing.
 
-## Noted but not actioned here
+## Where the stub SDK's shape is pinned
 
-`tests/integrations/conftest.py` states that the stub SDK's shape is pinned
-by `test_sdk_surface.py::test_stub_matches_real_sdk_surface`; no test of that
-name exists in that file today (the real pinning is done per-class, across
-several differently-named tests). This is a documentation task, not a test
-change, so the stale cross-reference is left as-is rather than fixed here.
+`tests/integrations/conftest.py` explains that the stub SDK installed into
+`sys.modules` only has to be *shaped* like the real one, and points at where
+that shape is held to the vendors: not one consolidated test, but four
+per-vendor classes in `test_sdk_surface.py`, each checking the real call
+sites and overridden hooks against the installed vendor package.
+
+```
+$ grep -n 'class Test.*Surface' tests/integrations/test_sdk_surface.py
+39:class TestOpenAISurface:
+67:class TestAnthropicSurface:
+104:class TestLangChainSurface:
+139:class TestLlamaIndexSurface:
+```
+
+An earlier revision of that docstring named a single test that did not exist;
+it was corrected in `45e59b9` (PR #17), so the pointer now matches the file it
+describes.
