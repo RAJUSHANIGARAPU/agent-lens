@@ -1,5 +1,12 @@
 # Demo Storyboard: 15-Second Agent-Lens Demo
 
+> **STALE — never recorded.** This storyboard describes a browser-driven demo
+> (dashboard Pause/Fork clicks, driven by `examples/04_pause_and_fork.py`) that was
+> never produced. What actually ships is the terminal recording `demo.gif`, rendered
+> by `demo.tape` from `examples/07_demo_mock.py` (fork + numeric verdict, no pause
+> beat). The Frame 10 end-card tagline below predates the positioning now in
+> `README.md`. Kept as a record of the intended demo, not as a description of it.
+
 ## Setup
 - Terminal with `python examples/04_pause_and_fork.py` running
 - Browser open at `http://127.0.0.1:7878`

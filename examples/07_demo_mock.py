@@ -58,7 +58,7 @@ def typed(text: str, delay: float = 0.015) -> None:
 # ---------------------------------------------------------------
 # Boot
 # ---------------------------------------------------------------
-print(f"\n{BOLD}{MAGENTA}  agent-lens{RESET}  {DIM}— scientific method for LLM agents{RESET}\n")
+print(f"\n{BOLD}{MAGENTA}  agent-lens{RESET}  {DIM}— the framework-agnostic, local-first debugger for LLM agents{RESET}\n")
 
 tmp_db = tempfile.mktemp(suffix=".db")
 store = Store(path=tmp_db)
