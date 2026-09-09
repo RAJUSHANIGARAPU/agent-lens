@@ -8,7 +8,9 @@ Show HN: agent-lens – pause a running LLM agent, fork it, get a verdict
 
 agent-lens pauses a running LLM agent mid-call, lets you edit the prompt or a tool response, forks the run into a second branch, and resumes the original — so you end up with two comparable runs and a script-checkable verdict of `improved`, `regressed`, `both_pass`, or `neither_pass`.
 
-You don't need a live agent to see the mechanic in under a minute: `pip install agentlens-tracer`, run one bundled Python script, and it records two runs, forks, prints deltas and a verdict against a throwaway local database — no API key, no account, no Docker.
+You don't need a live agent to see the mechanic in under a minute: `pip install agentlens-tracer`, run one bundled Python script, and it writes two sample runs, forks, prints deltas and a verdict against a throwaway local database — no API key, no account, no Docker. Those two runs are fixtures rather than real LLM calls, so the numbers it prints are made up; what's real is the store, the diff endpoint and the verdict it puts them through.
+
+One naming note before anyone else spots it: an unrelated project also called AgentLens was posted here in March 2026. No connection to this one — mine is `agent-lens`, on PyPI as `agentlens-tracer`.
 
 Before you install it, the parts that aren't there yet: forked runs are not auto-relaunched, you restart the forked agent yourself; it's a local, single-user tool with no shared dashboard, so a team that already runs a hosted multi-user eval pipeline is better served by something like Arize Phoenix; there's no hosted offering at all — it's local-first and SQLite by design, so if you want zero local infrastructure Langfuse or LangSmith fit that better; it's built for development and debugging, not production monitoring; and the database needs a real file path, there's no in-memory mode.
 
@@ -50,7 +52,8 @@ agent-lens is a framework-agnostic, local-first debugger for LLM agents — paus
 
 ## Notes (citations — do not post this section)
 
-- FLAG FOR HUMAN: an unrelated project named "AgentLens" was Show HN'd March 2026 (2 pts, overlapping trace-comparison feature). Name-collision handling is not addressed in this draft and needs a decision before posting.
+- FLAG FOR HUMAN: an unrelated project named "AgentLens" was Show HN'd March 2026 (2 pts, overlapping trace-comparison feature). The post body now names it in one line rather than waiting to be corrected in the thread. That disclosure is not the same as a decision: whether to keep the name, rename, or say nothing at all is still open, and the wording is a placeholder to be rewritten in the author's own voice.
+- CLAIM: "those two runs are fixtures rather than real LLM calls, so the numbers it prints are made up" — SOURCE: README.md:92 and README.md:105 (`data={"latency_ms": 1847, ...}` / `820`, hand-written into the demo script's save_event calls) and README.md:55 ("**The two runs are sample data, not measurements.**"). Added because the longer writeup disclosed this and the post body did not, and the post body is the part that gets read.
 - CLAIM: "agent-lens pauses a running LLM agent mid-call, lets you edit the prompt or a tool response, forks the run into a second branch, and resumes the original" — SOURCE: README.md:222-236 (pause/fork/resume diagram, "No restarts. No re-running preceding steps.")
 - CLAIM: "a script-checkable verdict of `improved`, `regressed`, `both_pass`, or `neither_pass`" — SOURCE: agent_lens/compare.py:98-100 (verdict computed as improved/regressed/both_pass/neither_pass)
 - CLAIM: "Most "compare two agent runs" tooling operates on runs that have already finished, or on checkpoints written after the fact." — SOURCE: docs/COMPARISON.md:9 (exact sentence)
