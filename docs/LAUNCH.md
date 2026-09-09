@@ -10,7 +10,7 @@ agent-lens pauses a running LLM agent mid-call, lets you edit the prompt or a to
 
 You don't need a live agent to see the mechanic in under a minute: `pip install agentlens-tracer`, run one bundled Python script, and it writes two sample runs, forks, prints deltas and a verdict against a throwaway local database — no API key, no account, no Docker. Those two runs are fixtures rather than real LLM calls, so the numbers it prints are made up; what's real is the store, the diff endpoint and the verdict it puts them through.
 
-One naming note before anyone else spots it: an unrelated project also called AgentLens was posted here in March 2026. No connection to this one — mine is `agent-lens`, on PyPI as `agentlens-tracer`.
+The name is not unique. An unrelated AgentLens was posted here in March 2026 — different project, no connection. This one is `agent-lens`, `agentlens-tracer` on PyPI.
 
 Before you install it, the parts that aren't there yet: forked runs are not auto-relaunched, you restart the forked agent yourself; it's a local, single-user tool with no shared dashboard, so a team that already runs a hosted multi-user eval pipeline is better served by something like Arize Phoenix; there's no hosted offering at all — it's local-first and SQLite by design, so if you want zero local infrastructure Langfuse or LangSmith fit that better; it's built for development and debugging, not production monitoring; and the database needs a real file path, there's no in-memory mode.
 
