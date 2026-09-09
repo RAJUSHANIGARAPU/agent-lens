@@ -10,7 +10,7 @@ This is the state of AI agent debugging in 2026. Every practitioner building age
 
 Existing observability tools (Langfuse, LangSmith, Phoenix, AgentOps, Helicone, Lunary, Braintrust, OpenLLMetry, Opik) all solve the same problem: *logging and replay for analysis*. They capture traces. They let you view what happened. Some let you define experiments. None of them let you **pause a live running agent, edit its state mid-execution, and fork a new run from that exact point**—without restarting, without re-running preceding steps, without changing your application code.
 
-agent-lens is the interactive debugger for LLM agents. Like `pdb` changed Python debugging by letting you stop execution and inspect/modify state at any line, agent-lens changes agent debugging by letting you stop at any LLM call, edit the messages or tool results, and fork a parallel execution branch. This is not a logging tool. It is a runtime debugger.
+agent-lens is the framework-agnostic, local-first debugger for LLM agents. Like `pdb` changed Python debugging by letting you stop execution and inspect/modify state at any line, agent-lens changes agent debugging by letting you stop at any LLM call, edit the messages or tool results, and fork a parallel execution branch. This is not a logging tool. It is a runtime debugger.
 
 The product is zero-infrastructure: one `pip install`, one `agent_lens.install()` call, and a local web dashboard is running at `localhost:7878`. No cloud accounts. No API keys for the tool itself. No data leaves the machine. This matters because agents often handle sensitive data—customer information, internal documents, credentials—and practitioners rightly refuse to route that through third-party cloud services.
 

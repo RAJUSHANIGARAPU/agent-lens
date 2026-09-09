@@ -23,7 +23,7 @@ import typer
 
 app = typer.Typer(
     name="agent-lens",
-    help="The interactive debugger for LLM agents.",
+    help="The framework-agnostic, local-first debugger for LLM agents.",
     add_completion=False,
 )
 

@@ -2,7 +2,7 @@
 
 ## What is agent-lens?
 
-agent-lens is the interactive debugger for LLM agents. Like `pdb` lets you pause and inspect a Python program at any line, agent-lens lets you pause a running LLM agent at any point, inspect its state, edit its messages, and fork a new execution branch — without restarting, without re-running preceding steps.
+agent-lens is the framework-agnostic, local-first debugger for LLM agents. Like `pdb` lets you pause and inspect a Python program at any line, agent-lens lets you pause a running LLM agent at any point, inspect its state, edit its messages, and fork a new execution branch — without restarting, without re-running preceding steps.
 
 ## Installation
 

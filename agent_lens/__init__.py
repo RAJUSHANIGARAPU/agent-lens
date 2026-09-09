@@ -1,7 +1,7 @@
 """
 agent-lens
 ~~~~~~~~~~
-The interactive debugger for LLM agents.
+The framework-agnostic, local-first debugger for LLM agents.
 
 Pause a running agent, edit its memory or messages, and fork a new run
 from any point in time — with zero infrastructure.

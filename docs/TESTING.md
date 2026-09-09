@@ -1,8 +1,9 @@
 # Testing agent-lens
 
-agent-lens is the interactive debugger for LLM agents: pause, inspect, and fork
-any agent mid-run (that is the project's own `pyproject.toml` description,
-verbatim). This document explains how the test suite is organized, why the
+agent-lens is the framework-agnostic, local-first debugger for LLM agents —
+pause, fork, and get a numeric verdict on which run actually worked (that is
+the project's own `pyproject.toml` description, verbatim). This document
+explains how the test suite is organized, why the
 lines between categories were drawn where they were, and what the suite does
 and does not actually verify. Every number below is followed immediately by
 the command that produced it, so any of them can be re-run and checked.
