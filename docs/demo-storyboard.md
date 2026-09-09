@@ -4,7 +4,7 @@
 > (dashboard Pause/Fork clicks, driven by `examples/04_pause_and_fork.py`) that was
 > never produced. What actually ships is the terminal recording `demo.gif`, rendered
 > by `demo.tape` from `examples/07_demo_mock.py` (fork + numeric verdict, no pause
-> beat). The Frame 10 end-card tagline below predates the positioning now in
+> beat). The Frame 10 end-card tagline now carries the positioning from
 > `README.md`. Kept as a record of the intended demo, not as a description of it.
 
 ## Setup
@@ -101,7 +101,7 @@ agent_lens.install()
 
 ```
 agent-lens
-The interactive debugger for AI agents.
+The framework-agnostic, local-first debugger for LLM agents.
 
 pip install agentlens-tracer
 ```
