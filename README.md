@@ -287,18 +287,28 @@ Not trying to replace hosted trace-analysis platforms like Langfuse or LangSmith
 
 | Feature                               | agent-lens | Langfuse        | LangSmith |
 |---------------------------------------|:----------:|:---------------:|:---------:|
-| Local-first (no cloud)                | ✅         | Partial         | ❌        |
+| Local-first (no cloud)                | ✅         | Partial         | Partial   |
 | Pause live agent mid-run              | ✅         | ❌              | ❌        |
 | Fork from any LLM call                | ✅         | ❌              | ❌        |
-| **Structural run diff**               | ✅         | ❌              | ❌        |
-| **Hypothesis + expected_output**      | ✅         | ❌              | ❌        |
+| **Structural run diff**               | ✅         | Partial         | Partial   |
+| **Hypothesis + expected_output**      | ✅         | Partial         | Partial   |
 | **Fork lineage trace**                | ✅         | ❌              | ❌        |
 | Real-time dashboard                   | ✅         | ✅              | ✅        |
-| Multi-framework (OpenAI/Claude/LC)    | ✅         | ✅              | Partial   |
-| Data stays on your machine            | ✅         | ❌              | ❌        |
+| Multi-framework (OpenAI/Claude/LC)    | ✅         | ✅              | ✅        |
+| Data stays on your machine            | ✅         | Partial         | Partial   |
 | Zero-infrastructure setup             | ✅         | ❌              | ❌        |
 | Secret redaction by default           | ✅         | Partial         | Partial   |
 | Anthropic extended thinking captured  | ✅         | ❌              | ❌        |
+
+Sources below were fetched and verified 2026-09-11. Cited claims are the reason the cells above changed from earlier drafts; if a cell is not covered by a citation here, treat it as agent-lens's own self-reported claim about itself, not a claim about a competitor.
+
+- Local-first / data stays on your machine: LangSmith self-hosted is Enterprise-only (https://docs.langchain.com/langsmith/self-hosted); Langfuse self-hosting requires a multi-service Docker Compose stack (https://langfuse.com/self-hosting/deployment/docker-compose).
+- Structural run diff: Langfuse's Dataset Run Comparison View (https://langfuse.com/changelog/2024-11-18-dataset-runs-comparison-view) and LangSmith's experiment diff view (https://docs.langchain.com/langsmith/compare-experiment-results) both diff dataset/experiment batch runs, not arbitrary on-demand run pairs — agent-lens's diff endpoint works on any two runs.
+- Hypothesis + expected_output: both platforms support a reference/expected-output field on dataset examples (same two sources as above, plus https://docs.langchain.com/langsmith/evaluation-concepts) but neither attaches a hypothesis note to a live fork.
+- Real-time dashboard: https://docs.langchain.com/langsmith/observability, https://langfuse.com/
+- Multi-framework: https://docs.langchain.com/langsmith/observability, https://langfuse.com/integrations/frameworks/langchain, https://langfuse.com/integrations/model-providers/anthropic
+- Secret redaction by default: neither platform redacts by default — Langfuse requires a custom masking function (https://langfuse.com/docs/security-and-guardrails); LangSmith requires env vars or its SDK anonymizer (https://docs.langchain.com/langsmith/mask-inputs-outputs).
+- Anthropic extended thinking: absent from LangSmith's Anthropic tracing doc (https://docs.langchain.com/langsmith/trace-anthropic); open unresolved issue in Langfuse (https://github.com/langfuse/langfuse/issues/11109).
 
 ---
 
