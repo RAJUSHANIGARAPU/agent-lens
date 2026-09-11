@@ -300,7 +300,7 @@ Not trying to replace hosted trace-analysis platforms like Langfuse or LangSmith
 | Secret redaction by default           | ✅         | Partial         | Partial   |
 | Anthropic extended thinking captured  | ✅         | ❌              | ❌        |
 
-Sources below were fetched and verified 2026-09-11. Cited claims are the reason the cells above changed from earlier drafts; if a cell is not covered by a citation here, treat it as agent-lens's own self-reported claim about itself, not a claim about a competitor.
+Sources below were fetched and verified 2026-09-11. Cited claims are the reason the cells above changed from earlier drafts; an uncited ❌ in the Langfuse or LangSmith column means no documented feature was found in either vendor's public docs as of 2026-09-11, not a self-reported claim about agent-lens.
 
 - Local-first / data stays on your machine: LangSmith self-hosted is Enterprise-only (https://docs.langchain.com/langsmith/self-hosted); Langfuse self-hosting requires a multi-service Docker Compose stack (https://langfuse.com/self-hosting/deployment/docker-compose).
 - Structural run diff: Langfuse's Dataset Run Comparison View (https://langfuse.com/changelog/2024-11-18-dataset-runs-comparison-view) and LangSmith's experiment diff view (https://docs.langchain.com/langsmith/compare-experiment-results) both diff dataset/experiment batch runs, not arbitrary on-demand run pairs — agent-lens's diff endpoint works on any two runs.
