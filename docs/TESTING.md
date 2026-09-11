@@ -360,20 +360,17 @@ class could ever surface, since a stub accepts any override name.
   once it has been published to an advisory database. A finding does fail
   the build now, but a not-yet-disclosed vulnerability still passes silently.
 
-- **The performance budget is never checked in CI.**
-
-  ```
-  $ sed -n '19,22p' tests/integration/test_overhead.py
-  @pytest.mark.skipif(
-      sys.platform == "win32" or bool(os.environ.get("CI")),
-      reason="Performance benchmarks are only meaningful on local hardware",
-  )
-  ```
-
-  `test_overhead.py` skips whenever the `CI` environment variable is set (or
-  on Windows), so the "100 traced calls under 500ms" budget only actually
-  holds, and is only actually checked, on whatever machine a developer
-  happens to run it on locally. It is not part of what makes CI green.
+- **The performance budget is enforced only on the Linux CI legs.** The
+  `skipif` on `TestOverheadBenchmark` in `tests/integration/test_overhead.py`
+  skips the "100 traced calls under 500ms" budget on Windows unconditionally,
+  and on any CI runner that is not Linux. The matrix in
+  `.github/workflows/ci.yml` is `[ubuntu-latest, macos-latest, windows-latest]`,
+  so only the `ubuntu-latest` legs actually gate on the budget — the macOS and
+  Windows legs skip it, because those shared runners are too noisy to judge
+  timing on. Locally it still runs on any non-Windows machine. Two gaps
+  remain: a regression that shows up only in macOS or Windows timing is
+  invisible to CI, and on CI the limit is relaxed to 3x local (1500ms), so a
+  regression smaller than that multiple still passes.
 
 - **Two modules are weakly covered even where tests do run.**
   `agent_lens/dashboard_launcher.py` sits at 32% in the coverage table above,
