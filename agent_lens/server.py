@@ -102,7 +102,7 @@ def create_app(store=None, csrf_token: str | None = None) -> FastAPI:
 
     app = FastAPI(
         title="agent-lens",
-        description="Interactive debugger for LLM agents",
+        description="Framework-agnostic, local-first debugger for LLM agents — pause, fork, and get a numeric verdict on which run actually worked.",
         version="0.1.0",
         docs_url=None,  # Disable Swagger UI in production
         redoc_url=None,
