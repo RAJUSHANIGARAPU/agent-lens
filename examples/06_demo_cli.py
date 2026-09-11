@@ -70,7 +70,7 @@ def typed(text: str, delay: float = 0.015) -> None:
 # ---------------------------------------------------------------
 # Boot
 # ---------------------------------------------------------------
-print(f"\n{BOLD}{MAGENTA}  agent-lens{RESET}  {DIM}— framework-agnostic, local-first debugger for LLM agents{RESET}\n")
+print(f"\n{BOLD}{MAGENTA}  agent-lens{RESET}  {DIM}— the framework-agnostic, local-first debugger for LLM agents{RESET}\n")
 
 agent_lens.install()
 agent_lens.dashboard.start()
