@@ -291,8 +291,9 @@ class TestSecretRedaction:
 # ----------------------------------------------------------------
 
 @pytest.mark.skipif(
-    sys.platform == "win32" or bool(os.environ.get("CI")),
-    reason="Performance benchmarks are only meaningful on local hardware",
+    sys.platform == "win32" or (bool(os.environ.get("CI")) and sys.platform != "linux"),
+    reason="Perf budget is gated on Linux CI and on local non-Windows machines; "
+    "shared macOS/Windows CI runners are too noisy to gate on",
 )
 class TestOverhead:
     def test_1000_no_op_calls_under_5_seconds(self, reset_singletons):
