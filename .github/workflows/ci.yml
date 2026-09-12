@@ -39,7 +39,8 @@ jobs:
             --cov=agent_lens \
             --cov-report=xml \
             --cov-report=term-missing \
-            -v
+            -v \
+            -rP
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
