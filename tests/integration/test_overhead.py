@@ -2,7 +2,7 @@
 Overhead benchmark test.
 
 100 mocked LLM calls through tracer must complete in < 500ms total.
-(5ms per call budget; 3x that on CI — see the comment on the assertion.)
+(5ms per call budget locally; CI limit anchored to observed ubuntu timings — see the assertion.)
 """
 
 import os
@@ -46,16 +46,19 @@ class TestOverheadBenchmark:
         print(f"\nOverhead: {elapsed_ms:.1f}ms total / {per_call_ms:.2f}ms per call")
 
         # 500ms (5ms/call) is the developer-hardware budget README.md and
-        # CONTRIBUTING.md both quote. GitHub-hosted runners are shared 4-vCPU VMs
-        # with slower, noisier disks, and every traced call commits 7 SQLite
-        # transactions (run, span, event, span, event, status, FTS reindex), so
-        # wall-clock there is a small multiple of local. CI budget = 3x local =
-        # 1500ms (15ms/call). Calibration: the sibling budget below allows 2ms for a
-        # single-commit record_event, so ~2.1ms per commit here is the same order of
-        # slack this suite already accepts, not an open-ended number. A tracer
-        # regression past 3x its documented per-call budget still fails.
-        ci_multiplier = 3.0
-        limit_ms = 500.0 * ci_multiplier if os.environ.get("CI") else 500.0
+        # CONTRIBUTING.md both quote; the else branch below keeps that number
+        # unchanged. The CI branch is anchored instead to real ubuntu-latest
+        # timings from PR #35 CI run 34687558815: the worst of three
+        # single-shot per-interpreter samples was Python 3.11, job
+        # 103537105152, at 91.3ms total / 0.913ms per call (3.10 and 3.12 both
+        # came in lower, around 86ms). 91.3ms x 3 = 273.9, rounded up to 274.0.
+        # The 3x multiplier is the top of the accepted 2-3x band, chosen
+        # because three single-shot samples give no variance estimate for how
+        # much a noisy shared runner could push a future run above 91.3ms. If
+        # this proves flaky, re-anchor on more samples rather than loosening
+        # the multiplier.
+        ci_limit_ms = 274.0
+        limit_ms = ci_limit_ms if os.environ.get("CI") else 500.0
 
         assert elapsed_ms < limit_ms, (
             f"100 traced calls took {elapsed_ms:.1f}ms "
