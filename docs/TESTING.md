@@ -360,17 +360,25 @@ class could ever surface, since a stub accepts any override name.
   once it has been published to an advisory database. A finding does fail
   the build now, but a not-yet-disclosed vulnerability still passes silently.
 
-- **The performance budget is enforced only on the Linux CI legs.** The
-  `skipif` on `TestOverheadBenchmark` in `tests/integration/test_overhead.py`
-  skips the "100 traced calls under 500ms" budget on Windows unconditionally,
-  and on any CI runner that is not Linux. The matrix in
+- **The performance budget is enforced only on the Linux CI legs.** Two
+  classes carry the same `skipif`: `TestOverheadBenchmark` in
+  `tests/integration/test_overhead.py` (the "100 traced calls under 500ms"
+  budget) and `TestOverhead` in `tests/test_tracer.py` (1000 traced calls
+  under 5s, and under 50ms per call on average). Both are skipped on Windows
+  unconditionally and on any CI runner that is not Linux. The matrix in
   `.github/workflows/ci.yml` is `[ubuntu-latest, macos-latest, windows-latest]`,
-  so only the `ubuntu-latest` legs actually gate on the budget — the macOS and
-  Windows legs skip it, because those shared runners are too noisy to judge
-  timing on. Locally it still runs on any non-Windows machine. Two gaps
-  remain: a regression that shows up only in macOS or Windows timing is
-  invisible to CI, and on CI the limit is relaxed to 3x local (1500ms), so a
-  regression smaller than that multiple still passes.
+  so for both classes only the `ubuntu-latest` legs actually gate on the
+  budget — the macOS and Windows legs skip them, because those shared runners
+  are too noisy to judge timing on. Locally both still run on any non-Windows
+  machine. The two classes are not calibrated the same way for CI:
+  `TestOverheadBenchmark` switches to a separate CI limit of 274ms (3x the
+  worst observed `ubuntu-latest` run, and tighter than the 500ms local
+  budget), while `TestOverhead` applies the same fixed thresholds on CI and
+  locally. Whether that difference should be closed is a separate open
+  question this note does not settle. Two gaps remain: a regression that
+  shows up only in macOS or Windows timing is invisible to CI, and the 274ms
+  CI limit sits at 3x observed timing, so a regression smaller than that
+  multiple still passes.
 
 - **Two modules are weakly covered even where tests do run.**
   `agent_lens/dashboard_launcher.py` sits at 32% in the coverage table above,
