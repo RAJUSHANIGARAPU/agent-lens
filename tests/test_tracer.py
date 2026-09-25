@@ -311,11 +311,17 @@ class TestOverhead:
         print(f"\n1000 traced calls: {elapsed:.3f}s total / {per_call_ms:.3f}ms per call")
 
         # 5.0s is the developer-hardware budget; the else branch below keeps
-        # that number unchanged. The CI branch is currently provisional and
-        # equal to the local budget (no CI adjustment yet), until it is
-        # anchored to a real ubuntu-latest run of this test's printed timing
-        # in a follow-up commit.
-        ci_limit_s = 5.0
+        # that number unchanged. The CI branch is anchored to real
+        # ubuntu-latest timings from PR #38 CI run 36175278157: the worst of
+        # three single-shot per-interpreter samples was Python 3.12, job
+        # 108204256837, at 1.032s total / 1.032ms per call (3.10 came in at
+        # 0.914s, 3.11 at 1.026s). 1.032 x 3 = 3.096, rounded up to 3.10.
+        # The 3x multiplier is the top of the accepted 2-3x band, chosen
+        # because three single-shot samples give no variance estimate for how
+        # much a noisy shared runner could push a future run above 1.032s. If
+        # this proves flaky, re-anchor on more samples rather than loosening
+        # the multiplier.
+        ci_limit_s = 3.10
         limit_s = ci_limit_s if os.environ.get("CI") else 5.0
 
         assert elapsed < limit_s, f"1000 traced calls took {elapsed:.2f}s (limit: {limit_s:.2f}s)"
@@ -340,11 +346,17 @@ class TestOverhead:
         print(f"\nTestOverhead per call (N={N}): {elapsed * 1000:.1f}ms total / {per_call_ms:.3f}ms per call")
 
         # 50ms/call is the local ceiling; the else branch below keeps that
-        # number unchanged. The CI branch is currently provisional and equal
-        # to the local budget (no CI adjustment yet), until it is anchored to
-        # a real ubuntu-latest run of this test's printed timing in a
-        # follow-up commit.
-        ci_limit_ms = 50.0
+        # number unchanged. The CI branch is anchored to real ubuntu-latest
+        # timings from PR #38 CI run 36175278157: the worst of three
+        # single-shot per-interpreter samples was Python 3.12, job
+        # 108204256837, at 87.7ms total / 0.877ms per call (3.10 came in at
+        # 72.5ms/0.725ms, 3.11 at 81.5ms/0.815ms). 0.877 x 3 = 2.631, rounded
+        # up to 2.64. The 3x multiplier is the top of the accepted 2-3x band,
+        # chosen because three single-shot samples give no variance estimate
+        # for how much a noisy shared runner could push a future run above
+        # 0.877ms. If this proves flaky, re-anchor on more samples rather than
+        # loosening the multiplier.
+        ci_limit_ms = 2.64
         limit_ms = ci_limit_ms if os.environ.get("CI") else 50.0
 
         assert per_call_ms < limit_ms, f"Avg overhead {per_call_ms:.2f}ms/call is too high (limit: {limit_ms:.2f}ms)"
