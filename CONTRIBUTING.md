@@ -16,14 +16,12 @@ If you're new to the project, look for issues tagged `good first issue`:
 
 | Area | Task |
 |------|------|
-| **Integrations** | Add a `LlamaIndexCallbackHandler` — mirror `agent_lens/integrations/langchain.py` |
 | **Integrations** | Add AutoGen / CrewAI support via `@agent_lens.trace` wrapper |
 | **CLI** | Add `agent-lens runs` to list recent runs in the terminal |
 | **CLI** | Add `agent-lens diff <run_a> <run_b>` shorthand for the diff endpoint |
 | **CLI** | Add `--json` flag to `agent-lens export` for JSON output instead of HTML |
 | **Dashboard** | Show `cost_usd` in the run list table |
 | **Dashboard** | Add a "copy curl command" button next to each run |
-| **Tests** | Add integration test for `GET /lineage` with a 3-deep fork chain |
 | **Async** | Async-aware pause/resume using `asyncio.Event` |
 
 ## Development Setup
@@ -52,7 +50,6 @@ python examples/07_demo_mock.py
 - **Ruff** for linting: `ruff check agent_lens/ tests/`
 - **Type hints** on all public functions
 - **Docstrings** on all public classes and functions
-- No `@Autowired` (this is Python :) — constructor injection only
 - Constructor injection for dependencies (no globals in business logic except the singletons in `tracer.py`, `control.py`, `store.py`)
 
 ## Testing
@@ -61,11 +58,20 @@ All new code needs tests. The test structure:
 
 ```
 tests/
-  test_tracer.py        — unit tests for the tracer
-  test_server.py        — FastAPI app tests
-  test_control.py       — ControlPlane unit tests
-  integration/          — end-to-end tests
-  security/             — security-focused tests
+  test_tracer.py                — unit tests for the tracer
+  test_server.py                — FastAPI app tests
+  test_control.py               — ControlPlane unit tests
+  test_cli.py                   — Typer CLI
+  test_compare.py               — structural run comparison (diff endpoint, MCP compare tool)
+  test_export.py                — export builders
+  test_integrations.py          — provider capture path (OpenAI, Anthropic, LangChain, LlamaIndex)
+  test_mcp_server.py            — MCP server
+  test_store_search.py          — full-text search in the store
+  test_quickstart_invariants.py — README quickstart guard
+  test_docs_references.py       — docs cite only paths and tests that exist
+  integration/                  — end-to-end tests
+  integrations/                 — per-provider capture layer, pricing, vendor SDK surface
+  security/                     — security-focused tests
 ```
 
 Run the full test suite:

@@ -14,8 +14,8 @@ pip install -e ".[dev,sdks]" && AGENT_LENS_REQUIRE_SDKS=1 pytest tests/integrati
 
 - Renamed a test file, test function, test class or CI job? Grep `docs/`, `README.md` and
   `CONTRIBUTING.md` for the old name and fix every hit — the docs cite tests and jobs by name
-  and have drifted three times (7a7f149, 45e59b9, 5141e6b). `tests/test_quickstart_invariants.py`
-  only guards the README quickstart block, not these references.
+  and have drifted three times (7a7f149, 45e59b9, 5141e6b). `tests/test_docs_references.py`
+  fails on a stale path or test name in these docs; it does not scan comments in `tests/`.
 - The CI perf limits in `tests/integration/test_overhead.py` (`TestOverheadBenchmark`) and
   `tests/test_tracer.py` (`TestOverhead`) are anchored to observed ubuntu-latest run timings,
   cited in the comments next to the assertions. Never loosen a threshold to get a green run;
