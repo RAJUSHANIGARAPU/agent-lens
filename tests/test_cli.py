@@ -239,3 +239,17 @@ def test_mcp_runs_server(monkeypatch):
     result = runner.invoke(app, ["mcp"])
     assert result.exit_code == 0
     assert called.get("ran") is True
+
+
+def test_dashboard_exits_nonzero_when_start_fails(monkeypatch):
+    from agent_lens import dashboard_launcher
+
+    def _fail(**kw):
+        raise dashboard_launcher.DashboardStartError("agent-lens dashboard failed to start on http://127.0.0.1:7878")
+
+    monkeypatch.setattr(dashboard_launcher, "start", _fail)
+
+    result = runner.invoke(app, ["dashboard", "--no-browser"])
+    assert result.exit_code == 1
+    assert "failed to start" in _combined(result)
+    assert "Press Ctrl+C" not in _combined(result)

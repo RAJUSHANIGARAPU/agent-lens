@@ -14,6 +14,7 @@ Commands:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import sys
@@ -35,10 +36,14 @@ def dashboard(
     no_browser: bool = typer.Option(False, "--no-browser", help="Don't open browser automatically"),
 ) -> None:
     """Start the agent-lens dashboard server."""
-    from agent_lens.dashboard_launcher import start
+    from agent_lens.dashboard_launcher import DashboardStartError, start
 
     typer.echo(f"Starting agent-lens dashboard on http://{host}:{port}")
-    start(port=port, host=host, open_browser=not no_browser)
+    try:
+        start(port=port, host=host, open_browser=not no_browser)
+    except DashboardStartError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from None
 
     typer.echo("Press Ctrl+C to stop.")
     try:
@@ -121,8 +126,14 @@ def replay(
 
     typer.echo("Run loaded. Starting dashboard...")
 
-    from agent_lens.dashboard_launcher import start
-    start(port=port, host="127.0.0.1", open_browser=True, store=store)
+    from agent_lens.dashboard_launcher import DashboardStartError, start
+    try:
+        start(port=port, host="127.0.0.1", open_browser=True, store=store)
+    except DashboardStartError as exc:
+        typer.echo(str(exc), err=True)
+        with contextlib.suppress(OSError):  # Windows keeps the open SQLite file locked
+            os.unlink(tmp_name)
+        raise typer.Exit(1) from None
 
     typer.echo(f"Dashboard at http://127.0.0.1:{port}")
     typer.echo("Press Ctrl+C to stop.")

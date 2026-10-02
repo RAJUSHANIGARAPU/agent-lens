@@ -15,7 +15,11 @@ from typing import Any
 
 _server_thread: threading.Thread | None = None
 _server_url: str | None = None
-_server_started = threading.Event()
+_server: Any | None = None
+
+
+class DashboardStartError(RuntimeError):
+    """Raised when the dashboard server could not start (e.g. the port is in use)."""
 
 
 def start(
@@ -23,6 +27,7 @@ def start(
     host: str = "127.0.0.1",
     open_browser: bool = True,
     store: Any | None = None,
+    startup_timeout: float = 5.0,
 ) -> str:
     """
     Start the agent-lens dashboard in a background daemon thread.
@@ -37,51 +42,68 @@ def start(
         If True, opens the dashboard in the default browser after startup.
     store : Store | None
         Custom Store instance (for testing). Uses the default store if None.
+    startup_timeout : float
+        Seconds to wait for the server to start accepting connections.
 
     Returns
     -------
     str
         The URL at which the dashboard is running.
+
+    Raises
+    ------
+    DashboardStartError
+        If the server did not come up, most commonly because the port is
+        already in use.
     """
-    global _server_thread, _server_url, _server_started
+    global _server_thread, _server_url, _server
 
     url = f"http://{host}:{port}"
 
     if _server_thread is not None and _server_thread.is_alive():
         return _server_url or url
 
-    _server_started.clear()
-    _server_url = url
+    import uvicorn
 
     from agent_lens.server import CSRF_TOKEN, create_app
-    print(f"agent-lens CSRF token: {CSRF_TOKEN}")
 
     app = create_app(store=store)
-
-    def _run_server():
-        import uvicorn
-
-        config = uvicorn.Config(
+    server = uvicorn.Server(
+        uvicorn.Config(
             app=app,
             host=host,
             port=port,
             log_level="warning",
             loop="asyncio",
         )
-        server = uvicorn.Server(config)
+    )
 
-        # Signal that the server is about to start
-        _server_started.set()
-        server.run()
+    # uvicorn reports a bind failure by logging it and calling sys.exit(1),
+    # which in a background thread only ends that thread. So "started" is
+    # judged by uvicorn's own flag, not by the thread having been launched.
+    thread = threading.Thread(target=server.run, name="agent-lens-server", daemon=True)
+    thread.start()
 
-    _server_thread = threading.Thread(target=_run_server, name="agent-lens-server", daemon=True)
-    _server_thread.start()
+    deadline = time.monotonic() + startup_timeout
+    while not server.started and thread.is_alive() and time.monotonic() < deadline:
+        time.sleep(0.05)
 
-    # Wait for server to start (up to 5 seconds)
-    _server_started.wait(timeout=5.0)
-    # Give uvicorn a moment to bind the port
-    time.sleep(0.5)
+    if not server.started:
+        server.should_exit = True
+        if thread.is_alive():
+            reason = f"the server did not start within {startup_timeout:g}s"
+        else:
+            reason = f"the server exited during startup; port {port} is probably already in use"
+        raise DashboardStartError(
+            f"agent-lens dashboard failed to start on {url}: {reason}. "
+            f"Free the port or choose another one, e.g. start(port={port + 1})."
+        )
 
+    _server = server
+    _server_thread = thread
+    _server_url = url
+
+    print(f"agent-lens CSRF token: {CSRF_TOKEN}")
     print(f"agent-lens dashboard running at {url}")
 
     if open_browser:
