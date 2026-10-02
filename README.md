@@ -164,7 +164,7 @@ Dashboard opens. Every LLM call is traced. Pause, fork, diff — all from the br
 
 ## The four killer endpoints
 
-No other observability tool — Langfuse, LangSmith, Phoenix, AgentOps, Helicone — has any of these.
+Pausing a live run, forking from any LLM call, and tracing fork lineage have no documented equivalent in Langfuse or LangSmith; their run-diff and expected-output features work on dataset/experiment runs rather than on arbitrary run pairs or live forks. See [How agent-lens compares](#how-agent-lens-compares) for the sources, checked 2026-09-11.
 
 ### 1. Fork with hypothesis + assertion
 
@@ -331,7 +331,7 @@ Yes. Use `@agent_lens.trace` on any Python function. The SDK integrations are op
 No. All data is stored in `~/.agent-lens/runs.db`. No telemetry, no callbacks, no network egress.
 
 **Is it production-safe?**
-It's designed for development and debugging. The overhead is < 5ms per traced call on local hardware. The dashboard server binds to 127.0.0.1 only — it's not exposed to the network.
+It's designed for development and debugging. Measured tracer overhead is about 1 ms per traced call: the test suite's benchmark (100 and 1000 calls to a traced no-op function) records 0.8–1.0 ms per call on GitHub's ubuntu-latest runners, and Linux CI fails if the 100-call average goes above 2.64 ms. That is the tracer's own cost, on top of whatever the LLM call takes. The dashboard server binds to 127.0.0.1 only — it's not exposed to the network.
 
 **What happens when I restart the dashboard?**
 Traces persist in SQLite. Reload the dashboard — your previous runs and forks are still there, with all their notes intact.
