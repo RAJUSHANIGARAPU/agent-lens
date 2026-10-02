@@ -4,10 +4,10 @@
 
 Output demo.gif
 
-Set Theme Monokai
+Set Theme Molokai
 Set FontSize 18
-Set Width 120
-Set Height 42
+Set Width 1200
+Set Height 800
 Set Padding 20
 Set TypingSpeed 40ms
 
