@@ -4,7 +4,7 @@
 
 Output demo.gif
 
-Set Theme Monokai
+Set Theme Molokai
 Set FontSize 18
 Set Width 120
 Set Height 42

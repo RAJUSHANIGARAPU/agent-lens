@@ -7,9 +7,15 @@ on:
     paths:
       - demo.tape
       - examples/07_demo_mock.py
+  pull_request:
+    branches: [main]
+    paths:
+      - demo.tape
+      - examples/07_demo_mock.py
+      - .github/workflows/demo.yml
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   generate:
@@ -37,12 +43,24 @@ jobs:
         uses: charmbracelet/vhs-action@v2
         with:
           path: demo.tape
+          version: "v0.12.1"
           install-dependencies: false
 
-      - name: Commit and push demo.gif
+      - name: Extract preview frames
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add demo.gif
-          git diff --staged --quiet && echo "demo.gif unchanged, skipping commit" || \
-            git commit -m "chore: regenerate demo.gif [skip ci]" && git push
+          ffmpeg -y -loglevel error -i demo.gif -vf "select=gte(t\,4)" -frames:v 1 demo-frame-early.png
+          ffmpeg -y -loglevel error -i demo.gif -update 1 demo-frame-last.png
+
+      - name: Upload demo.gif
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-gif
+          path: demo.gif
+          if-no-files-found: error
+
+      - name: Upload preview frames
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-frames
+          path: demo-frame-*.png
+          if-no-files-found: error
