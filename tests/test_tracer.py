@@ -10,7 +10,6 @@ Covers:
 """
 
 import os
-import sys
 import threading
 import time
 import uuid
@@ -26,6 +25,7 @@ from agent_lens.tracer import (
     trace,
     trace_span,
 )
+from tests._perf_gate import skip_unless_perf_gated
 
 # ----------------------------------------------------------------
 # Basic decorator tests
@@ -290,11 +290,7 @@ class TestSecretRedaction:
 # Overhead benchmark
 # ----------------------------------------------------------------
 
-@pytest.mark.skipif(
-    sys.platform == "win32" or (bool(os.environ.get("CI")) and sys.platform != "linux"),
-    reason="Perf budget is gated on Linux CI and on local non-Windows machines; "
-    "shared macOS/Windows CI runners are too noisy to gate on",
-)
+@skip_unless_perf_gated
 class TestOverhead:
     def test_1000_no_op_calls_under_5_seconds(self, reset_singletons):
         """1000 traced no-op calls must complete in under 5 seconds."""
