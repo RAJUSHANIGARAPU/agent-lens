@@ -370,15 +370,19 @@ class could ever surface, since a stub accepts any override name.
   so for both classes only the `ubuntu-latest` legs actually gate on the
   budget — the macOS and Windows legs skip them, because those shared runners
   are too noisy to judge timing on. Locally both still run on any non-Windows
-  machine. The two classes are not calibrated the same way for CI:
-  `TestOverheadBenchmark` switches to a separate CI limit of 274ms (3x the
-  worst observed `ubuntu-latest` run, and tighter than the 500ms local
-  budget), while `TestOverhead` applies the same fixed thresholds on CI and
-  locally. Whether that difference should be closed is a separate open
-  question this note does not settle. Two gaps remain: a regression that
-  shows up only in macOS or Windows timing is invisible to CI, and the 274ms
-  CI limit sits at 3x observed timing, so a regression smaller than that
-  multiple still passes.
+  machine. Both classes switch to a separate, tighter CI limit when the `CI`
+  environment variable is set, and keep the local budget otherwise.
+  `TestOverheadBenchmark` uses 274ms on CI against 500ms locally, anchored
+  to PR #35 CI run 34687558815, whose worst single-shot sample was Python
+  3.11 at 91.3ms (x3 = 273.9, rounded up to 274.0). `TestOverhead` uses
+  3.10s on CI against 5s locally for the 1000-call test, and 2.64ms per call
+  on CI against 50ms locally for the per-call test, both anchored to PR #38
+  CI run 36175278157, whose worst single-shot samples were Python 3.12 at
+  1.032s total and 0.877ms per call. Two gaps remain: a regression that shows
+  up only in macOS or Windows timing is invisible to CI, and every CI limit
+  in both `TestOverheadBenchmark` and `TestOverhead` sits at 3x the worst of
+  three single-shot samples, so a regression smaller than that multiple
+  still passes, and that margin rests on no variance estimate.
 
 - **Two modules are weakly covered even where tests do run.**
   `agent_lens/dashboard_launcher.py` sits at 32% in the coverage table above,
