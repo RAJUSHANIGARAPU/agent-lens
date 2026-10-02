@@ -6,21 +6,15 @@ Overhead benchmark test.
 """
 
 import os
-import sys
 import time
 import uuid
 
-import pytest
-
 from agent_lens.models import EventType
 from agent_lens.tracer import Tracer, trace
+from tests._perf_gate import skip_unless_perf_gated
 
 
-@pytest.mark.skipif(
-    sys.platform == "win32" or (bool(os.environ.get("CI")) and sys.platform != "linux"),
-    reason="Perf budget is gated on Linux CI and on local non-Windows machines; "
-    "shared macOS/Windows CI runners are too noisy to gate on",
-)
+@skip_unless_perf_gated
 class TestOverheadBenchmark:
     def test_100_traced_calls_under_500ms(self, reset_singletons):
         """
@@ -45,8 +39,8 @@ class TestOverheadBenchmark:
         per_call_ms = elapsed_ms / N
         print(f"\nOverhead: {elapsed_ms:.1f}ms total / {per_call_ms:.2f}ms per call")
 
-        # 500ms (5ms/call) is the developer-hardware budget README.md and
-        # CONTRIBUTING.md both quote; the else branch below keeps that number
+        # 500ms (5ms/call) is the developer-hardware budget CONTRIBUTING.md
+        # quotes; the else branch below keeps that number
         # unchanged. The CI branch is anchored instead to real ubuntu-latest
         # timings from PR #35 CI run 34687558815: the worst of three
         # single-shot per-interpreter samples was Python 3.11, job
