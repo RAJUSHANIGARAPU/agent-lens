@@ -4,6 +4,9 @@ agent-lens mock CLI demo — no OpenAI key required.
 Uses pre-canned responses to produce a deterministic, repeatable terminal
 demo. Perfect for asciinema / VHS recording without burning API credits.
 
+Run A is a live run: it is paused mid-flight, inspected, and resumed before the
+fork and diff are shown.
+
 Usage:
     python examples/07_demo_mock.py
 
@@ -16,11 +19,13 @@ from __future__ import annotations
 import json
 import sys
 import tempfile
+import threading
 import time
 import urllib.request
 import uuid
 
 import agent_lens
+from agent_lens.control import ControlPlane
 from agent_lens.models import Event, EventType, Run, RunStatus, Span
 from agent_lens.store import Store
 
@@ -95,64 +100,117 @@ CONCISE_RESPONSE = (
     "bytecode at a time, preventing true parallelism but simplifying memory management."
 )
 
-now = time.time()
-
 # ---------------------------------------------------------------
 # Run A: verbose
 # ---------------------------------------------------------------
-section("[1/4]  Run A — verbose system prompt", YELLOW)
+section("[1/5]  Run A — verbose system prompt", YELLOW)
 typed(f"  {DIM}prompt:{RESET}  Be thorough and pedagogical. Cover background, examples, edge cases.")
 typed(f"  {DIM}query:{RESET}   {QUESTION}")
 print()
 
 run_a_id = str(uuid.uuid4())
 span_a_id = str(uuid.uuid4())
-t_a = now - 3.0
+t_a = time.time()
 
+# Run A starts RUNNING with no end_time; a worker thread drives it through the
+# control plane so it can really be paused at the LLM call.
 store.save_run(Run(
     id=run_a_id, name="verbose_agent",
-    start_time=t_a, end_time=t_a + 1.847,
-    status=RunStatus.COMPLETED,
+    start_time=t_a, status=RunStatus.RUNNING,
 ))
-store.save_span(Span(
-    id=span_a_id, run_id=run_a_id, name="chat.completions", type="llm",
-    start_time=t_a, end_time=t_a + 1.847,
-))
-store.save_event(Event(
-    run_id=run_a_id, span_id=span_a_id, type=EventType.LLM_START, timestamp=t_a,
-    data={"messages": [
-        {"role": "system", "content": VERBOSE_SYSTEM},
-        {"role": "user", "content": QUESTION},
-    ]},
-))
-store.save_event(Event(
-    run_id=run_a_id, span_id=span_a_id, type=EventType.LLM_END, timestamp=t_a + 1.847,
-    data={
-        "latency_ms": 1847, "total_tokens": 453, "cost_usd": 0.0045,
-        "response": {"choices": [{"message": {"content": VERBOSE_RESPONSE}}]},
-    },
-))
+
+cp = ControlPlane.get_instance()
+cp.set_store(store)
+started = threading.Event()
+
+
+def run_a_worker() -> None:
+    store.save_span(Span(
+        id=span_a_id, run_id=run_a_id, name="chat.completions", type="llm",
+        start_time=t_a,
+    ))
+    store.save_event(Event(
+        run_id=run_a_id, span_id=span_a_id, type=EventType.LLM_START, timestamp=t_a,
+        data={"messages": [
+            {"role": "system", "content": VERBOSE_SYSTEM},
+            {"role": "user", "content": QUESTION},
+        ]},
+    ))
+    started.set()
+    time.sleep(0.4)  # building the request
+    cp.before_llm_call(run_a_id)  # blocks here while the run is paused
+    store.save_event(Event(
+        run_id=run_a_id, span_id=span_a_id, type=EventType.LLM_END, timestamp=t_a + 1.847,
+        data={
+            "latency_ms": 1847, "total_tokens": 453, "cost_usd": 0.0045,
+            "response": {"choices": [{"message": {"content": VERBOSE_RESPONSE}}]},
+        },
+    ))
+    store.save_span(Span(
+        id=span_a_id, run_id=run_a_id, name="chat.completions", type="llm",
+        start_time=t_a, end_time=t_a + 1.847,
+    ))
+
+
+worker = threading.Thread(target=run_a_worker, name="run-a-worker", daemon=True)
+
+
+def count_llm_end(run_id: str) -> int:
+    return sum(1 for e in store.get_events(run_id) if e.type == EventType.LLM_END)
+
+
+# ---------------------------------------------------------------
+# Pause / resume Run A
+# ---------------------------------------------------------------
+section("[2/5]  Pause Run A mid-flight", YELLOW)
+worker.start()
+assert started.wait(timeout=5), "worker did not start"
+cp.pause(run_a_id)
+time.sleep(0.6)
+
+run_a = store.get_run(run_a_id)
+llm_end_a = count_llm_end(run_a_id)
+assert run_a is not None
+assert run_a.status == RunStatus.PAUSED, f"expected PAUSED, got {run_a.status}"
+assert worker.is_alive(), "worker should be blocked in before_llm_call"
+assert llm_end_a == 0, f"expected no LLM_END while paused, got {llm_end_a}"
+
+print(f"  {YELLOW}{BOLD}{RunStatus(run_a.status).value.upper()}{RESET}  Run A is held before its LLM call")
+print(f"  {DIM}worker alive:{RESET}  {worker.is_alive()}   {DIM}LLM_END events:{RESET}  {llm_end_a}")
+time.sleep(2.0)
+
+cp.resume(run_a_id)
+print(f"\n  {GREEN}{BOLD}RESUMED{RESET}  Run A continues")
+worker.join(timeout=5)
+assert not worker.is_alive(), "worker did not finish after resume"
+store.update_run_status(run_a_id, RunStatus.COMPLETED, end_time=time.time())
+
+run_a = store.get_run(run_a_id)
+assert run_a is not None
+assert run_a.status == RunStatus.COMPLETED, f"expected COMPLETED, got {run_a.status}"
+assert count_llm_end(run_a_id) == 1, "expected exactly one LLM_END after resume"
+cp.cleanup(run_a_id)
 
 print(f"  {GREEN}✓ Run A complete{RESET}")
 
 # ---------------------------------------------------------------
 # Hypothesis
 # ---------------------------------------------------------------
-section("[2/4]  Hypothesis", MAGENTA)
+section("[3/5]  Hypothesis", MAGENTA)
 typed(f"  {YELLOW}A shorter system prompt will produce a concise response.{RESET}")
 typed(f"  {DIM}expected_output:{RESET}  {BOLD}'concise'{RESET}")
 
 # ---------------------------------------------------------------
 # Run B: concise
 # ---------------------------------------------------------------
-section("[3/4]  Run B — fork with edited system prompt", YELLOW)
+section("[4/5]  Run B — fork with edited system prompt", YELLOW)
 typed(f"  {DIM}prompt:{RESET}  Answer in one short sentence.")
 typed(f"  {DIM}query:{RESET}   {QUESTION}")
 print()
 
 run_b_id = str(uuid.uuid4())
 span_b_id = str(uuid.uuid4())
-t_b = now - 1.0
+t_b = time.time()
 
 store.save_run(Run(
     id=run_b_id, name="concise_agent",
@@ -186,7 +244,7 @@ print(f"  {GREEN}✓ Run B complete{RESET}")
 # ---------------------------------------------------------------
 # Diff
 # ---------------------------------------------------------------
-section("[4/4]  GET /runs/A/diff/B", CYAN)
+section("[5/5]  GET /runs/A/diff/B", CYAN)
 diff_url = f"http://localhost:7878/runs/{run_a_id}/diff/{run_b_id}"
 typed(f"  {DIM}$ curl -s {diff_url[:50]}...{RESET}")
 print()
