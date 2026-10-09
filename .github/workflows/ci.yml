@@ -131,3 +131,22 @@ jobs:
         run: |
           pip install dist/*.whl
           python -c "import agent_lens; print(agent_lens.__version__)"
+
+  demo-drift:
+    name: demo-drift
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # A shallow checkout lacks the base SHA; the script exits 2 rather than pass.
+      - name: Fail if demo.tape or the demo script changed without demo.gif
+        run: python scripts/check_demo_drift.py --base ${{ github.event.pull_request.base.sha }} --head ${{ github.event.pull_request.head.sha }}

@@ -3,6 +3,7 @@
 demo.yml once ran against floating "latest" VHS, which dropped the theme name used in
 demo.tape, and its last step pushed a ``[skip ci]`` commit. These checks keep the
 workflow pinned and read-only, and the tape on a valid theme with a real canvas size.
+The ci.yml demo-drift job must keep running the drift script on pull requests.
 No YAML dependency: the workflow is checked line by line.
 """
 
@@ -13,6 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW = (ROOT / ".github" / "workflows" / "demo.yml").read_text(encoding="utf-8")
+CI_WORKFLOW = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 TAPE = (ROOT / "demo.tape").read_text(encoding="utf-8")
 
 
@@ -68,3 +70,40 @@ def test_tape_size_is_in_pixels_not_columns():
 def test_tape_still_writes_demo_gif_that_readme_embeds():
     assert re.search(r"(?m)^Output demo\.gif\s*$", TAPE)
     assert "![agent-lens demo](demo.gif)" in (ROOT / "README.md").read_text(encoding="utf-8")
+
+
+def _ci_job_block(name: str) -> str:
+    """Text of one ci.yml job, up to the next job key or the end of the file."""
+    start = re.search(rf"(?m)^  {re.escape(name)}:\s*$", CI_WORKFLOW)
+    assert start, f"ci.yml has no {name} job"
+    rest = CI_WORKFLOW[start.end() :]
+    nxt = re.search(r"(?m)^  [\w-]+:\s*$", rest)
+    return rest[: nxt.start()] if nxt else rest
+
+
+def test_ci_has_demo_drift_job_running_the_script():
+    block = _ci_job_block("demo-drift")
+    assert "scripts/check_demo_drift.py" in block
+    assert "name: demo-drift" in block
+
+
+def test_demo_drift_job_fetches_full_history():
+    assert re.search(r"fetch-depth:\s*0\b", _ci_job_block("demo-drift"))
+
+
+def test_demo_drift_job_passes_pr_base_and_head_sha():
+    block = _ci_job_block("demo-drift")
+    assert "github.event.pull_request.base.sha" in block
+    assert "github.event.pull_request.head.sha" in block
+
+
+def test_demo_drift_job_cannot_be_silenced():
+    block = _ci_job_block("demo-drift")
+    assert "continue-on-error" not in block
+    assert "|| true" not in block
+
+
+def test_demo_drift_job_runs_on_pull_request():
+    block = _ci_job_block("demo-drift")
+    ifs = [line for line in block.splitlines() if line.strip().startswith("if:")]
+    assert any("pull_request" in line for line in ifs), block
