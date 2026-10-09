@@ -45,6 +45,27 @@ pytest tests/ -v
 python examples/07_demo_mock.py
 ```
 
+### Keeping demo.gif in sync
+
+A pull request that changes `demo.tape` or `examples/07_demo_mock.py` must also change
+`demo.gif`. The `demo-drift` job in `.github/workflows/ci.yml` enforces this. Re-render the
+GIF with the Demo workflow and commit the artifact it produces.
+
+For an edit that does not change the rendered output (a comment in the tape, a timing-neutral
+tweak), add this line to the message of any commit in the PR:
+
+```
+Demo-Gif-Override: <reason>
+```
+
+The key is case-sensitive, it goes on its own line, and the reason must not be empty.
+
+To run the same check locally:
+
+```bash
+python scripts/check_demo_drift.py --base origin/main --head HEAD
+```
+
 ## Code Style
 
 - **Ruff** for linting: `ruff check agent_lens/ tests/`
@@ -69,6 +90,7 @@ tests/
   test_store_search.py          — full-text search in the store
   test_quickstart_invariants.py — README quickstart guard
   test_docs_references.py       — docs cite only paths and tests that exist
+  test_demo_drift.py            — demo-drift check (temp git repos)
   integration/                  — end-to-end tests
   integrations/                 — per-provider capture layer, pricing, vendor SDK surface
   security/                     — security-focused tests
