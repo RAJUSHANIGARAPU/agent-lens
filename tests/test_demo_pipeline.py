@@ -23,10 +23,24 @@ def _vhs_step_with_block() -> str:
     return rest[: nxt.start()] if nxt else rest
 
 
+def _vhs_version_pin_ok(block: str) -> bool:
+    """True if the block pins vhs-action to a literal vX.Y.Z (the action rejects X.Y.Z)."""
+    return bool(re.search(r'(?m)^\s+version:\s*"?v(\d+\.\d+\.\d+)"?\s*$', block))
+
+
 def test_vhs_version_is_a_literal_release():
     block = _vhs_step_with_block()
-    m = re.search(r'(?m)^\s+version:\s*"?v?(\d+\.\d+\.\d+)"?\s*$', block)
-    assert m, f"vhs-action step has no literal x.y.z version:\n{block}"
+    assert _vhs_version_pin_ok(block), f"vhs-action step has no literal x.y.z version:\n{block}"
+
+
+def test_vhs_pin_without_v_prefix_is_rejected():
+    assert not _vhs_version_pin_ok('        version: "0.12.1"\n')
+    assert not _vhs_version_pin_ok("        version: 0.12.1\n")
+
+
+def test_vhs_pin_with_v_prefix_is_accepted():
+    assert _vhs_version_pin_ok('        version: "v0.12.1"\n')
+    assert _vhs_version_pin_ok("        version: v0.12.1\n")
 
 
 def test_no_floating_latest_version():
