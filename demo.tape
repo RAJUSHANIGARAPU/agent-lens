@@ -13,4 +13,5 @@ Set TypingSpeed 40ms
 
 Type "python examples/07_demo_mock.py"
 Enter
-Sleep 30s
+# examples/07_demo_mock.py measured at 46.0s wall time; Sleep is >= 1.25x that so the verdict is recorded.
+Sleep 60s

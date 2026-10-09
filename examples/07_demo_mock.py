@@ -16,6 +16,8 @@ For VHS recording:
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import sys
 import tempfile
@@ -67,7 +69,9 @@ print(f"\n{BOLD}{MAGENTA}  agent-lens{RESET}  {DIM}— the framework-agnostic, l
 
 tmp_db = tempfile.mktemp(suffix=".db")
 store = Store(path=tmp_db)
-agent_lens.dashboard.start(store=store, open_browser=False)
+# start() prints the per-process CSRF token; keep it out of the recording.
+with contextlib.redirect_stdout(io.StringIO()):
+    agent_lens.dashboard.start(store=store, open_browser=False)
 time.sleep(1.0)
 
 QUESTION = "What is Python's GIL?"
