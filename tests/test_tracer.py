@@ -290,7 +290,6 @@ class TestSecretRedaction:
 # Overhead benchmark
 # ----------------------------------------------------------------
 
-@skip_unless_perf_gated
 def _rounds_ms(fn, n, rounds):
     """Time `rounds` batches of `n` calls; a runner stall only adds time, so callers judge the fastest."""
     out = []
@@ -302,6 +301,7 @@ def _rounds_ms(fn, n, rounds):
     return out
 
 
+@skip_unless_perf_gated
 class TestOverhead:
     def test_1000_no_op_calls_under_5_seconds(self, reset_singletons):
         """1000 traced no-op calls must complete in under 5 seconds."""
