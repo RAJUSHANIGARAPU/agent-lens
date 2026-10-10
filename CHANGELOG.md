@@ -21,6 +21,9 @@ All notable changes to agent-lens are documented here.
   each traced call makes six SQLite commits, so the number was measuring the
   runner's disk as much as the tracer. The 274ms CI limit is unchanged, and a
   slowdown injected into the traced path still fails it.
+- `TestOverhead` in `tests/test_tracer.py` uses the same approach: the
+  1000-call test takes the fastest of five rounds and the per-call test the
+  fastest of seven. The 3.10s and 2.64ms CI limits are unchanged.
 - The `security` CI job's `pip-audit` step ran under `continue-on-error`, so
   a finding was logged and the job still went green regardless. The three
   CVEs it had been ignoring (CVE-2025-8869, CVE-2026-1703, CVE-2026-3219) are
