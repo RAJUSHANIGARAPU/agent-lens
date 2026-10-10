@@ -15,6 +15,12 @@ All notable changes to agent-lens are documented here.
   catches a skip from any cause rather than only the anticipated one.
 
 ### Changed
+- The "100 traced calls" overhead benchmark now times seven rounds and asserts
+  on the fastest, instead of a single shot. A single shot failed PR #47 at
+  903.3ms against a usual 59-140ms on the same runner type, and passed on rerun:
+  each traced call makes six SQLite commits, so the number was measuring the
+  runner's disk as much as the tracer. The 274ms CI limit is unchanged, and a
+  slowdown injected into the traced path still fails it.
 - The `security` CI job's `pip-audit` step ran under `continue-on-error`, so
   a finding was logged and the job still went green regardless. The three
   CVEs it had been ignoring (CVE-2025-8869, CVE-2026-1703, CVE-2026-3219) are

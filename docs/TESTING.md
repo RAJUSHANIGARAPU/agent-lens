@@ -374,7 +374,12 @@ class could ever surface, since a stub accepts any override name.
   environment variable is set, and keep the local budget otherwise.
   `TestOverheadBenchmark` uses 274ms on CI against 500ms locally, anchored
   to PR #35 CI run 34687558815, whose worst single-shot sample was Python
-  3.11 at 91.3ms (x3 = 273.9, rounded up to 274.0). `TestOverhead` uses
+  3.11 at 91.3ms (x3 = 273.9, rounded up to 274.0). Its 100-call test times
+  seven rounds and asserts on the fastest: every traced call makes six SQLite
+  commits, so a disk or CPU stall on a shared runner lands in one round, and
+  a single-shot sample once read 903.3ms against a usual 59-140ms (PR #47, run
+  37979555467). The limit was not moved; a slowdown in the traced path raises
+  every round, the fastest included. `TestOverhead` uses
   3.10s on CI against 5s locally for the 1000-call test, and 2.64ms per call
   on CI against 50ms locally for the per-call test, both anchored to PR #38
   CI run 36175278157, whose worst single-shot samples were Python 3.12 at
