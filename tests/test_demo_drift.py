@@ -9,12 +9,14 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "scripts" / "check_demo_drift.py"
+CI = ROOT / ".github" / "workflows" / "ci.yml"
 
 # The trailer name that was replaced; it must no longer waive the check.
 OLD_TRAILER = "Demo-Gif-Override"
@@ -260,3 +262,47 @@ def test_check_returns_result_without_exiting(tmp_path: Path) -> None:
         sys.modules.pop("check_demo_drift", None)
     assert int(result.verdict) == 1
     assert result.message
+
+
+def _demo_drift_job() -> list[str]:
+    """Lines of the demo-drift job in ci.yml, up to the next job or end of file."""
+    lines = CI.read_text(encoding="utf-8").splitlines()
+    start = next((i for i, ln in enumerate(lines) if ln.rstrip() == "  demo-drift:"), None)
+    assert start is not None, "demo-drift job missing from ci.yml"
+    block = [lines[start]]
+    for ln in lines[start + 1 :]:
+        if re.match(r"^  [\w-]+:\s*$", ln):
+            break
+        block.append(ln)
+    return block
+
+
+def test_workflow_has_demo_drift_job_on_pull_request() -> None:
+    text = "\n".join(_demo_drift_job())
+    assert "if: github.event_name == 'pull_request'" in text
+    assert "runs-on: ubuntu-latest" in text
+    assert "timeout-minutes: 10" in text
+
+
+def test_workflow_demo_drift_cannot_be_softened() -> None:
+    for ln in _demo_drift_job():
+        for bad in ("continue-on-error", "|| true", "set +e"):
+            assert bad not in ln, f"demo-drift must stay blocking, found {bad!r}"
+    whole = CI.read_text(encoding="utf-8")
+    assert "pull_request.base.sha" not in whole
+    assert "pull_request.head.sha" not in whole
+
+
+def test_workflow_invokes_script_with_base_ref_and_head() -> None:
+    calls = [
+        ln
+        for ln in _demo_drift_job()
+        if "scripts/check_demo_drift.py" in ln and not ln.lstrip().startswith("#")
+    ]
+    assert len(calls) == 1
+    assert "--base origin/${{ github.base_ref }}" in calls[0]
+    assert "--head HEAD" in calls[0]
+
+
+def test_workflow_checkout_fetches_full_history() -> None:
+    assert any(ln.strip() == "fetch-depth: 0" for ln in _demo_drift_job())
