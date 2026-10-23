@@ -15,7 +15,10 @@ import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -50,6 +53,9 @@ DEMO_TIMEOUT_S = 2 * DEMO_LOADED_RUNTIME_S
 # Stdout line count of the script before the dashboard startup lines were
 # silenced; the fix removes exactly 2 of them.
 DEMO_STDOUT_LINES = 70
+# Short limit for the hang probe; 3 s (not 2 s) so the stub's PID print lands
+# before the kill even on a busy machine.
+HANG_PROBE_TIMEOUT_S = 3.0
 
 
 def _run_script(args: list[str], timeout: float) -> subprocess.CompletedProcess[str]:
@@ -103,3 +109,22 @@ def test_demo_output_has_no_csrf_token() -> None:
     assert "RESUMED" in out
     # Guards against redirecting the whole script's stdout.
     assert DEMO_STDOUT_LINES - 4 <= len(proc.stdout.splitlines()) <= DEMO_STDOUT_LINES
+
+
+def test_hang_guard_kills_a_hanging_script() -> None:
+    stub = "import os, time; print(os.getpid(), flush=True); time.sleep(3600)"
+    start = time.monotonic()
+    with pytest.raises(subprocess.TimeoutExpired) as exc_info:
+        _run_script([sys.executable, "-c", stub], timeout=HANG_PROBE_TIMEOUT_S)
+    elapsed = time.monotonic() - start
+    assert HANG_PROBE_TIMEOUT_S <= elapsed < 10, elapsed
+
+    # On POSIX TimeoutExpired.stdout is bytes even with text=True.
+    captured = exc_info.value.stdout or b""
+    if isinstance(captured, bytes):
+        captured = captured.decode("utf-8")
+    pid = int(captured.split()[0])
+    if os.name == "posix":
+        # subprocess.run kills and reaps the child; signal 0 only probes.
+        with pytest.raises(ProcessLookupError):
+            os.kill(pid, 0)
