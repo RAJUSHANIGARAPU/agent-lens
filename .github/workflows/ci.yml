@@ -131,3 +131,24 @@ jobs:
         run: |
           pip install dist/*.whl
           python -c "import agent_lens; print(agent_lens.__version__)"
+
+  demo-drift:
+    name: Demo GIF drift
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Full history is required: the check diffs merge-base(base, HEAD)..HEAD.
+      # Exit 1 means demo.tape or the demo script changed without demo.gif;
+      # exit 2 means the history could not be read. Both must fail the job.
+      - name: Check demo.gif changed with its inputs
+        run: python scripts/check_demo_drift.py --base origin/${{ github.base_ref }} --head HEAD

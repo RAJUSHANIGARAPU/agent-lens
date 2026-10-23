@@ -45,6 +45,21 @@ pytest tests/ -v
 python examples/07_demo_mock.py
 ```
 
+### Keeping demo.gif in step
+
+The CI job `demo-drift` fails a pull request that changes `demo.tape` or
+examples/07_demo_mock.py without also changing `demo.gif`. Re-render the GIF (the Demo
+workflow uploads it as an artifact) and commit it. The check looks at changed files only:
+any change to `demo.gif` satisfies it; it does not verify that the GIF matches the script.
+
+If a change cannot affect the rendered GIF, add a `Demo-Drift-Override` trailer with a
+reason to one commit in the branch. It must be in the trailer block (the last paragraph of
+the message); an empty value or a mention in the body does not count:
+
+    git commit -m "chore(demo): reword tape comment" -m "Demo-Drift-Override: comment only, no visible change"
+
+`Demo-Drift-Override` replaced the earlier name `Demo-Gif-Override`, which is no longer accepted.
+
 ## Code Style
 
 - **Ruff** for linting: `ruff check agent_lens/ tests/`
