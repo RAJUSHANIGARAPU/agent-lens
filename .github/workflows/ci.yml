@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   test:
     name: "Python ${{ matrix.python-version }} on ${{ matrix.os }}"
@@ -151,4 +154,6 @@ jobs:
       # Exit 1 means demo.tape or the demo script changed without demo.gif;
       # exit 2 means the history could not be read. Both must fail the job.
       - name: Check demo.gif changed with its inputs
-        run: python scripts/check_demo_drift.py --base origin/${{ github.base_ref }} --head HEAD
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: python scripts/check_demo_drift.py --base "origin/$BASE_REF" --head HEAD
