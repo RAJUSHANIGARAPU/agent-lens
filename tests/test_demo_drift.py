@@ -251,10 +251,12 @@ def test_shallow_clone_cannot_determine(tmp_path: Path) -> None:
         repo.as_uri(),
         str(clone),
     )
+    assert _git(clone, env, "rev-parse", "--is-shallow-repository").strip() == "true"
     code, out = _run(clone, env, "origin/main", "origin/feature")
-    assert code == 2
-    assert code != 0
-    assert "cannot determine" in out
+    assert code == 2, out
+    assert "shallow clone" in out
+    assert "merge-base" not in out
+    assert "unknown ref" not in out
 
 
 def test_unknown_ref_cannot_determine(tmp_path: Path) -> None:
