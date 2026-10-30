@@ -187,6 +187,52 @@ def test_override_old_name_demo_gif_override_fails(tmp_path: Path) -> None:
     assert code == 1, out
 
 
+def _drop_gif_branch(repo: Path, env: dict[str, str], how: str) -> None:
+    _git(repo, env, "checkout", "-q", "-b", "feature")
+    if how == "rm":
+        _git(repo, env, "rm", "-q", GIF)
+    else:
+        _git(repo, env, "mv", GIF, "demo2.gif")
+
+
+def test_gif_deleted_with_tape_change_fails(tmp_path: Path) -> None:
+    repo, env = _make_repo(tmp_path)
+    _drop_gif_branch(repo, env, "rm")
+    _commit(repo, env, _tape_change(repo), "feat: tweak tape, drop gif")
+    code, out = _run(repo, env, "main", "feature")
+    assert code == 1, out
+    assert GIF in out
+    assert "missing at head" in out
+
+
+def test_gif_renamed_with_tape_change_fails(tmp_path: Path) -> None:
+    repo, env = _make_repo(tmp_path)
+    _drop_gif_branch(repo, env, "mv")
+    _commit(repo, env, _tape_change(repo), "feat: tweak tape, rename gif")
+    code, out = _run(repo, env, "main", "feature")
+    assert code == 1, out
+    assert GIF in out
+    assert "missing at head" in out
+
+
+def test_gif_deleted_alone_passes(tmp_path: Path) -> None:
+    # Pins the decision that there is no standalone "gif must exist" rule.
+    repo, env = _make_repo(tmp_path)
+    _drop_gif_branch(repo, env, "rm")
+    _commit(repo, env, {}, "chore: drop gif")
+    code, out = _run(repo, env, "main", "feature")
+    assert code == 0, out
+
+
+def test_gif_deleted_with_override_passes(tmp_path: Path) -> None:
+    repo, env = _make_repo(tmp_path)
+    _drop_gif_branch(repo, env, "rm")
+    msg = "chore: tape\n\nDemo-Drift-Override: gif re-rendered in follow-up\n"
+    _commit(repo, env, _tape_change(repo), msg)
+    code, out = _run(repo, env, "main", "feature")
+    assert code == 0, out
+
+
 def test_shallow_clone_cannot_determine(tmp_path: Path) -> None:
     repo, env = _make_repo(tmp_path)
     _feature(repo, env, _tape_change(repo), "feat: tweak tape")
