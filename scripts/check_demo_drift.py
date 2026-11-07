@@ -12,7 +12,7 @@ git, non-empty reason) waives the check.
 
 Exit codes:
     0  nothing to do, demo.gif changed too, or an override was honoured
-    1  drift: a guarded file changed and demo.gif did not
+    1  drift: a guarded file changed and demo.gif did not change or is missing at head
     2  cannot determine (shallow clone, unknown ref, no merge-base, git failure)
 """
 
@@ -59,6 +59,13 @@ def _unknown(detail: str) -> Result:
     return Result(Verdict.UNKNOWN, f"cannot determine: {detail}")
 
 
+def _gif_at_head(head_sha: str, cwd: str | os.PathLike[str] | None) -> bool | None:
+    proc = _git(["ls-tree", "--name-only", "-z", head_sha, "--", GIF], cwd)
+    if proc is None or proc.returncode != 0:
+        return None
+    return GIF in proc.stdout.split("\0")
+
+
 def check(base: str, head: str, cwd: str | os.PathLike[str] | None = None) -> Result:
     shallow = _git(["rev-parse", "--is-shallow-repository"], cwd)
     if shallow is None or shallow.returncode != 0:
@@ -88,7 +95,10 @@ def check(base: str, head: str, cwd: str | os.PathLike[str] | None = None) -> Re
     hit = [g for g in GUARDED if g in changed]
     if not hit:
         return Result(Verdict.PASS, "demo-drift: no guarded file changed")
-    if GIF in changed:
+    present = _gif_at_head(head_sha, cwd)
+    if present is None:
+        return _unknown("git ls-tree failed for demo.gif at head")
+    if GIF in changed and present:
         return Result(Verdict.PASS, f"demo-drift: {GIF} changed with its inputs")
 
     log = _git(
@@ -102,6 +112,12 @@ def check(base: str, head: str, cwd: str | os.PathLike[str] | None = None) -> Re
     if reasons:
         return Result(Verdict.PASS, f"demo-drift: override: {reasons[0]}")
 
+    if not present:
+        return Result(
+            Verdict.DRIFT,
+            f"demo drift: {', '.join(hit)} changed and {GIF} is missing at head. Restore and "
+            f"commit {GIF}, or add a '{TRAILER}: <reason>' trailer to a commit in this branch.",
+        )
     return Result(
         Verdict.DRIFT,
         f"demo drift: {', '.join(hit)} changed but {GIF} did not. Re-render and commit "

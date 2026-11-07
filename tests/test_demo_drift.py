@@ -25,6 +25,8 @@ TAPE = "demo.tape"
 DEMO_SCRIPT = "examples/07_demo_mock.py"
 GIF = "demo.gif"
 
+CHECK_RUN = 'run: python scripts/check_demo_drift.py --base "origin/$BASE_REF" --head HEAD'
+
 
 def _env(tmp_path: Path) -> dict[str, str]:
     """Environment isolated from the developer's and the runner's git configuration."""
@@ -187,6 +189,52 @@ def test_override_old_name_demo_gif_override_fails(tmp_path: Path) -> None:
     assert code == 1, out
 
 
+def _drop_gif_branch(repo: Path, env: dict[str, str], how: str) -> None:
+    _git(repo, env, "checkout", "-q", "-b", "feature")
+    if how == "rm":
+        _git(repo, env, "rm", "-q", GIF)
+    else:
+        _git(repo, env, "mv", GIF, "demo2.gif")
+
+
+def test_gif_deleted_with_tape_change_fails(tmp_path: Path) -> None:
+    repo, env = _make_repo(tmp_path)
+    _drop_gif_branch(repo, env, "rm")
+    _commit(repo, env, _tape_change(repo), "feat: tweak tape, drop gif")
+    code, out = _run(repo, env, "main", "feature")
+    assert code == 1, out
+    assert GIF in out
+    assert "missing at head" in out
+
+
+def test_gif_renamed_with_tape_change_fails(tmp_path: Path) -> None:
+    repo, env = _make_repo(tmp_path)
+    _drop_gif_branch(repo, env, "mv")
+    _commit(repo, env, _tape_change(repo), "feat: tweak tape, rename gif")
+    code, out = _run(repo, env, "main", "feature")
+    assert code == 1, out
+    assert GIF in out
+    assert "missing at head" in out
+
+
+def test_gif_deleted_alone_passes(tmp_path: Path) -> None:
+    # Pins the decision that there is no standalone "gif must exist" rule.
+    repo, env = _make_repo(tmp_path)
+    _drop_gif_branch(repo, env, "rm")
+    _commit(repo, env, {}, "chore: drop gif")
+    code, out = _run(repo, env, "main", "feature")
+    assert code == 0, out
+
+
+def test_gif_deleted_with_override_passes(tmp_path: Path) -> None:
+    repo, env = _make_repo(tmp_path)
+    _drop_gif_branch(repo, env, "rm")
+    msg = "chore: tape\n\nDemo-Drift-Override: gif re-rendered in follow-up\n"
+    _commit(repo, env, _tape_change(repo), msg)
+    code, out = _run(repo, env, "main", "feature")
+    assert code == 0, out
+
+
 def test_shallow_clone_cannot_determine(tmp_path: Path) -> None:
     repo, env = _make_repo(tmp_path)
     _feature(repo, env, _tape_change(repo), "feat: tweak tape")
@@ -205,10 +253,12 @@ def test_shallow_clone_cannot_determine(tmp_path: Path) -> None:
         repo.as_uri(),
         str(clone),
     )
+    assert _git(clone, env, "rev-parse", "--is-shallow-repository").strip() == "true"
     code, out = _run(clone, env, "origin/main", "origin/feature")
-    assert code == 2
-    assert code != 0
-    assert "cannot determine" in out
+    assert code == 2, out
+    assert "shallow clone" in out
+    assert "merge-base" not in out
+    assert "unknown ref" not in out
 
 
 def test_unknown_ref_cannot_determine(tmp_path: Path) -> None:
@@ -300,9 +350,66 @@ def test_workflow_invokes_script_with_base_ref_and_head() -> None:
         if "scripts/check_demo_drift.py" in ln and not ln.lstrip().startswith("#")
     ]
     assert len(calls) == 1
-    assert "--base origin/${{ github.base_ref }}" in calls[0]
+    assert '--base "origin/$BASE_REF"' in calls[0]
     assert "--head HEAD" in calls[0]
 
 
 def test_workflow_checkout_fetches_full_history() -> None:
     assert any(ln.strip() == "fetch-depth: 0" for ln in _demo_drift_job())
+
+
+def test_workflow_no_step_level_if() -> None:
+    job = _demo_drift_job()
+    assert "    if: github.event_name == 'pull_request'" in [ln.rstrip() for ln in job]
+    assert not [ln for ln in job if re.match(r"^ {6,}(- )?if:", ln)]
+
+
+def test_workflow_check_step_not_swallowed() -> None:
+    job = _demo_drift_job()
+    runs = [
+        ln
+        for ln in job
+        if re.match(r"^\s*(- )?run:", ln)
+        and not ln.lstrip().startswith("#")
+        and "check_demo_drift.py" in ln
+    ]
+    assert len(runs) == 1
+    assert runs[0].strip() == CHECK_RUN
+    assert not any("exit 0" in ln for ln in job)
+
+
+def test_workflow_triggers_on_pull_request() -> None:
+    lines = CI.read_text(encoding="utf-8").splitlines()
+    start = next((i for i, ln in enumerate(lines) if ln.rstrip() == "on:"), None)
+    assert start is not None, "top-level on: block missing from ci.yml"
+    block = []
+    for ln in lines[start + 1 :]:
+        if re.match(r"^\S", ln):
+            break
+        block.append(ln.rstrip())
+    assert "  pull_request:" in block
+
+
+def test_workflow_base_ref_via_env() -> None:
+    lines = CI.read_text(encoding="utf-8").splitlines()
+    job = _demo_drift_job()
+    env_lines = [ln for ln in lines if re.search(r"BASE_REF: \$\{\{ github\.base_ref \}\}", ln)]
+    assert len(env_lines) == 1
+    assert env_lines[0] in job
+    assert not [ln for ln in lines if re.search(r"run:.*\$\{\{ *github\.base_ref", ln)]
+    assert [ln for ln in job if "github.base_ref" in ln] == env_lines
+    assert any('"origin/$BASE_REF"' in ln for ln in job)
+
+
+def test_workflow_top_level_permissions_read_only() -> None:
+    lines = [ln.rstrip() for ln in CI.read_text(encoding="utf-8").splitlines()]
+    jobs_at = lines.index("jobs:")
+    head = lines[:jobs_at]
+    assert head.count("permissions:") == 1
+    assert not [ln for ln in head if ln.startswith("permissions: ")]
+    body = []
+    for ln in head[head.index("permissions:") + 1 :]:
+        if not ln or re.match(r"^\S", ln):
+            break
+        body.append(ln)
+    assert body == ["  contents: read"]
